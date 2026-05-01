@@ -1,0 +1,11 @@
+name: visualization
+description: >
+  Generates charts and plots when the user explicitly asks for a graph,
+  chart, or visual. Writes Python code using Plotly (px / go) to produce
+  figures assigned to the `fig` variable. Best for trend lines, bar
+  comparisons, scatter plots, and heatmaps.
+type: code
+tags:
+  - chart
+  - plot
+  - visualization

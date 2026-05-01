@@ -1,0 +1,11 @@
+name: daily_report
+description: >
+  Handles daily operational questions using pre-computed metrics:
+  revenue, order count (TC), average check (AC), waste rate, membership
+  recharge, and target achievement. Best for natural-language summaries
+  of yesterday or this week's performance.
+type: text
+tags:
+  - daily
+  - operations
+  - summary

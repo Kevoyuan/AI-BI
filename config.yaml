@@ -1,0 +1,29 @@
+financial_params:
+  fixed_cost: 1500.0          # Daily fixed cost (rent, labor, utilities)
+  raw_material_ratio: 0.35    # Cost of goods ratio (COGS %)
+  operation_ratio: 0.12       # Operating expense ratio
+
+# Loss / Waste categories tracked in the system
+loss_categories:
+  - tasting_samples           # Product samples given to customers
+  - production_waste          # Fresh-baked items unsold at end of day
+  - pastry_waste              # Pastry/dessert items
+  - cake_waste                # Specialty cakes
+  - biscuit_waste             # Packaged biscuit write-offs
+  - other_waste               # Other non-standard losses
+
+# Weather impact coefficients (multiplier on expected revenue)
+weather_impact:
+  sunny: 1.00
+  cloudy: 0.95
+  overcast: 0.90
+  light_rain: 0.80
+  moderate_rain: 0.65
+  heavy_rain: 0.45
+
+# Daily revenue targets by day of week (for demo purposes — replace with actuals)
+revenue_targets:
+  weekday:   { revenue: 8000,  orders: 200 }
+  friday:    { revenue: 10000, orders: 250 }
+  saturday:  { revenue: 15000, orders: 380 }
+  sunday:    { revenue: 18000, orders: 450 }

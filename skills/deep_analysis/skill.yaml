@@ -1,0 +1,11 @@
+name: deep_analysis
+description: >
+  Handles complex analytical questions that require writing Python code
+  to query DataFrames: multi-dimensional comparisons, custom aggregations,
+  correlation analysis, top-N rankings, and anything that cannot be
+  answered from pre-computed metrics alone.
+type: code
+tags:
+  - analysis
+  - code
+  - deep

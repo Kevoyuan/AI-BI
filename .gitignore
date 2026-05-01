@@ -1,0 +1,50 @@
+# Environment
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Data files (never commit real data)
+database/*.db
+data/*.xls
+data/*.xlsx
+data/*.csv
+data/*.json
+data/*.txt
+!data/mock/
+
+# Streamlit
+.streamlit/secrets.toml
+.streamlit/*.local.toml
+
+# Sessions
+sessions/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+logs/
