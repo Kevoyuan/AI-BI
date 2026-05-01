@@ -1,0 +1,14 @@
+name: forecast_alert
+description: >
+  Sales forecasting and anomaly alerting: predict future revenue, detect
+  abnormal fluctuations, analyse weather impact, and issue early operational
+  risk warnings. Use for predictions, anomaly detection, trend direction,
+  or risk signals.
+type: code
+tags:
+  - forecast
+  - prediction
+  - anomaly
+  - alert
+  - weather
+  - trend

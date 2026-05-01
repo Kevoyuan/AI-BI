@@ -49,19 +49,11 @@ AI-BI/
 │   └── ...
 │
 ├── skills/
-│   ├── daily_report/
-│   │   ├── skill.yaml         # Metadata (name, description, type)
-│   │   ├── prompt.md          # LLM system prompt
-│   │   └── scripts/
-│   │       └── daily_summary.py   # Deterministic daily aggregation
-│   ├── deep_analysis/
-│   │   ├── skill.yaml
-│   │   ├── prompt.md
-│   │   └── scripts/trend.py
-│   ├── visualization/
-│   │   └── skill.yaml + prompt.md
-│   └── forecast/
-│       └── skill.yaml + prompt.md
+│   ├── daily_report/          # Text-based daily ops Q&A
+│   ├── deep_analysis/         # Code-gen data analysis
+│   ├── visualization/         # Chart generation
+│   ├── forecast_alert/        # Forecasting & anomaly alerting
+│   └── profit_cost/           # Profit & cost deep analysis
 │
 └── data/mock/
     └── generate_mock_data.py  # Generates demo SQLite databases

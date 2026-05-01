@@ -1,0 +1,12 @@
+name: profit_cost
+description: >
+  Deep profit and cost analysis: gross margin, cost structure breakdown,
+  break-even point, ROI, and per-category profitability comparison.
+  Use for questions about profit, margins, cost, ROI, or payback period.
+type: code
+tags:
+  - profit
+  - cost
+  - margin
+  - roi
+  - breakeven
