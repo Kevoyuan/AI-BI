@@ -12,7 +12,8 @@
 
 | Feature | Details |
 |---|---|
-| **Modular Data Pipeline** | Multi-month SQLite databases auto-merged into cross-date DataFrames |
+| **Automated Data Pipeline** | Selenium + requests: auth → cookie bridge → headless Chrome export → Excel ETL → SQLite |
+| **Modular Data Loader** | Multi-month SQLite databases auto-merged into cross-date DataFrames |
 | **Thin Harness, Fat Skills** | Orchestration layer stays < 50 lines; all domain logic lives in `skills/*.md` |
 | **LLM Router Agent** | Skill-based intent routing — adding a new skill automatically makes it routable |
 | **Code-Gen Data Agent** | LLM generates and executes Python code against live DataFrames, with auto-retry |
@@ -28,6 +29,7 @@
 ```
 AI-BI/
 ├── app.py                     # Streamlit main entry point
+├── data_pipeline.py           # Automated crawl → ETL → SQLite pipeline
 ├── pages/
 │   └── 2_AI_Assistant.py      # AI Q&A — Thin Harness
 │
@@ -156,6 +158,36 @@ that runs against the live DataFrames. Key engineering decisions:
 - **Auto-retry**: on execution error, the error message is fed back to the LLM for one retry.
 - **Sandboxed execution**: code runs in a controlled namespace with only safe modules exposed.
 
+### Automated Data Pipeline
+
+`data_pipeline.py` demonstrates a production-grade web scraping and ETL flow:
+
+```
+requests.Session (fast login)
+    │
+    ▼
+transfer_cookies()  ←  bridges auth to Selenium (avoids double login)
+    │
+    ▼
+headless Chrome
+    ├── export_sales_flow()       → navigates report page, clicks export
+    ├── export_waste_records()    → fills date pickers, triggers download
+    ├── export_recharge_details() → handles readonly inputs via JS injection
+    ├── export_card_statistics()  → renames downloaded file to known name
+    ├── export_member_info()      → scrapes DOM text, saves to file
+    └── export_sales_tickets()    → multi-step modal workflow
+    │
+    ▼
+check_downloads() + retry_missing_downloads()   ← self-healing
+    │
+    ▼
+load_excel_data() → clean_waste_data() → export_to_database()
+                                            └── SQLite bulk insert
+```
+
+Key patterns: **singleton config** (INI/YAML/env), **exponential-backoff retry**,
+**cookie bridge** (requests → Selenium), **business-hour time adjustment**.
+
 ---
 
 ## 📈 ML Forecasting
@@ -204,7 +236,8 @@ revenue_targets:
 ## 📦 Tech Stack
 
 - **Streamlit 1.41** — UI framework
-- **Pandas / NumPy** — data manipulation
+- **Selenium + requests** — web scraping & automated data export
+- **Pandas / NumPy** — data manipulation & ETL
 - **pyecharts + Plotly** — visualisations
 - **Prophet + SARIMA + XGBoost** — forecasting
 - **OpenAI SDK** — DeepSeek / OpenAI-compatible LLM
