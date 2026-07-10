@@ -62,7 +62,7 @@ Prophet also attempts its own cross-validation using a 14-day initial window, a 
 - seven-day moving average;
 - current ensemble: `predict_cumulative_profit()` with its existing model availability and weight rules.
 
-The script reports MAE, RMSE, and MAPE. This is a single final holdout, not rolling-origin validation. In the latest local run with seed 42, the current ensemble scored MAE 31.19, RMSE 35.60, and MAPE 2.39%, versus seasonal naive at 40.17 / 50.68 / 3.02% and moving average at 71.55 / 95.59 / 5.16%. This result is a reproducible snapshot on one synthetic series, not evidence of generalization or financial forecasting validity; rerun the script when dependencies or evaluation inputs change.
+The script reports MAE, RMSE, and MAPE. This is a single final holdout, not rolling-origin validation. In the latest local run with seed 42, the current ensemble scored MAE 31.19, RMSE 35.60, and MAPE 2.39%, versus seasonal naive at 40.17 / 50.68 / 3.02% and moving average at 71.55 / 95.59 / 5.16%. This result is a reproducible snapshot on one synthetic series; it does not imply the ensemble will always beat either baseline, generalize to new data, or provide financial forecasting validation. Rerun the script when dependencies or evaluation inputs change.
 
 ## Important limitations
 
