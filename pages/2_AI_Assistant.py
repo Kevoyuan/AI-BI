@@ -242,12 +242,12 @@ def handle_message(prompt: str):
         history=st.session_state.messages,
         dataframes=st.session_state.all_data,
     )
-    response = ChatService().handle_message(request)
 
     with st.chat_message("assistant"):
         with st.status("🤖 Analysing…", expanded=True) as status:
 
             st.write("🛣️ Routing to best skill…")
+            response = ChatService().handle_message(request)
             st.markdown(
                 f"**Skill**: `{response.skill}` (type=`{response.skill_type}`) | "
                 f"{response.reason}"
