@@ -43,11 +43,11 @@ The synthetic generator is sufficient for a local portfolio demonstration. `data
 The current request sequence is:
 
 1. `pages/2_AI_Assistant.py` loads all available monthly tables and builds business context.
-2. The page stores the user message in Streamlit session state.
-3. `RouterAgent.resolve()` selects a skill and optional tables.
-4. A text skill streams a response using the prepared business context.
-5. A code skill calls `DataAnalysisAgent.run()` and can return text, generated code, a Plotly figure, and result data.
-6. The page renders the response and persists the conversation through `session_manager`.
+2. The page stores the user message in Streamlit session state and constructs a `ChatRequest`.
+3. `ChatService.handle_message()` calls `RouterAgent.resolve()` and selects a skill and optional tables.
+4. A text skill returns a response stream using the prepared business context.
+5. A code skill calls `DataAnalysisAgent.run()` and returns text, generated code, a Plotly figure, and result data.
+6. The page renders the `ChatResponse` and persists the conversation through `session_manager`.
 
 ## Design decisions
 
@@ -59,9 +59,9 @@ The project keeps data access, analytics, and presentation in one Python applica
 
 Each skill includes metadata and prompting guidance. The registry scans skill directories at runtime, so a new valid skill becomes visible to the router without adding another routing branch. Python changes may still be required when a skill needs a new deterministic helper or a new data source.
 
-### Thin presentation layer as a direction
+### Application service boundary
 
-The agent and data modules are reusable, but `pages/2_AI_Assistant.py` currently owns data loading, session lifecycle, routing, execution, rendering, and persistence. A thinner presentation layer is an architectural direction rather than a completed property of the current page.
+`application/chat_service.py` owns the chat Resolve → Execute workflow and returns UI-agnostic `ChatRequest`/`ChatResponse` data structures. The Streamlit page still owns sidebar interactions, session state, data refresh, and rendering, keeping Streamlit-specific behavior out of the service.
 
 ### Graceful degradation
 

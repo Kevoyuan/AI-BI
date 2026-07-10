@@ -1,26 +1,19 @@
 """
-AI Q&A Page — Thin Harness
-Responsible only for UI rendering and orchestration.
-All intelligence is encoded in skills/*.md (Fat Skills).
-All data access is delegated to deterministic modules.
+AI Q&A Page
 
-Architecture:
-  Fat Skills (skills/*/prompt.md)   → Domain knowledge + routing criteria
-  Thin Harness (this file)          → UI + Resolve Skill + Call LLM + Render
-  Deterministic Tooling             → data_loader, data_agent, chart_builder
+This page coordinates Streamlit UI, session/data loading, and rendering.
+The chat workflow is delegated to application.chat_service, while agent
+logic remains in reusable router and data-analysis modules.
 """
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 from typing import Dict, Any
 
+from application.chat_service import ChatRequest, ChatService
 from modules.config import Config
 from modules.skill_loader import SkillRegistry
-from modules.router_agent import RouterAgent
-from modules.data_agent import DataAnalysisAgent
-from modules.context_builder import build_business_context, build_system_prompt
-from modules.ai_chat import get_ai_response_stream
-from modules.chart_builder import build_chart
+from modules.context_builder import build_business_context
 from modules.data_loader import get_available_months
 from modules.session_manager import (
     list_sessions, load_session, save_session,
@@ -238,71 +231,47 @@ def _render_quick_questions():
 
 def handle_message(prompt: str):
     """
-    Thin Harness core loop:
+    Core Resolve → Execute → Render loop:
       1. Resolve: RouterAgent picks the best Skill.
       2. Execute: Run the skill (text chat or code generation).
       3. Render:  Display the result.
     """
+    request = ChatRequest(
+        prompt=prompt,
+        business_context=st.session_state.business_context,
+        history=st.session_state.messages,
+        dataframes=st.session_state.all_data,
+    )
+    response = ChatService().handle_message(request)
+
     with st.chat_message("assistant"):
         with st.status("🤖 Analysing…", expanded=True) as status:
 
-            # Step 1 — Resolve
             st.write("🛣️ Routing to best skill…")
-            router  = RouterAgent()
-            routing = router.resolve(
-                prompt,
-                st.session_state.business_context[:2000],
-                st.session_state.messages,
+            st.markdown(
+                f"**Skill**: `{response.skill}` (type=`{response.skill_type}`) | "
+                f"{response.reason}"
             )
-            skill_name = routing["skill"]
-            skill_type = routing["skill_type"]
-            reason     = routing["reason"]
-            req_tables = routing["required_tables"]
 
-            st.markdown(f"**Skill**: `{skill_name}` (type=`{skill_type}`) | {reason}")
+            answer = response.answer
+            code = response.code
 
-            # Step 2 — Execute
-            answer = code = chart = result_data = None
-
-            if skill_type == "code":
+            if response.skill_type == "code":
                 st.write("💻 Generating analysis code…")
-                try:
-                    agent = DataAnalysisAgent()
-                    out   = agent.run(
-                        prompt, st.session_state.all_data,
-                        st.session_state.messages,
-                        skill_name=skill_name,
-                        required_tables=req_tables,
-                    )
-                    for log in out.get("execution_log", []):
-                        st.caption(f"📋 {log}")
-
-                    code = out["code"]
-                    if code:
-                        with st.expander("📝 Generated code"):
-                            st.code(code, language="python")
-
-                    answer     = out["answer"]
-                    chart      = out.get("fig")
-                    result_data = out.get("result")
-
-                    if out["error"]:
-                        st.error(f"Execution error: {out['error']}")
-                        status.update(label="❌ Error", state="error")
-                    else:
-                        status.update(label="✅ Done", state="complete", expanded=False)
-
-                except Exception as exc:
-                    st.error(f"Agent error: {exc}")
-                    status.update(label="❌ System error", state="error")
-                    answer = f"Sorry, an error occurred: {exc}"
-
+                for log in response.execution_log:
+                    st.caption(f"📋 {log}")
+                if code:
+                    with st.expander("📝 Generated code"):
+                        st.code(code, language="python")
+                if response.error:
+                    st.error(f"Execution error: {response.error}")
+                    status.update(label="❌ Error", state="error")
+                else:
+                    status.update(label="✅ Done", state="complete", expanded=False)
             else:
                 st.write("📖 Fetching business context…")
                 try:
-                    system = build_system_prompt(st.session_state.business_context)
-                    stream = get_ai_response_stream(prompt, system, st.session_state.messages[:-1])
-                    answer = st.write_stream(stream)
+                    answer = st.write_stream(response.answer_stream)
                     status.update(label="✅ Done", state="complete", expanded=False)
                 except Exception as exc:
                     st.error(f"Chat error: {exc}")
@@ -310,19 +279,19 @@ def handle_message(prompt: str):
                     answer = f"Sorry: {exc}"
 
         # Step 3 — Render
-        if answer and skill_type == "code":
+        if answer and response.skill_type == "code":
             st.markdown(answer)
 
-        if chart is not None:
-            st.plotly_chart(chart, use_container_width=True,
+        if response.chart is not None:
+            st.plotly_chart(response.chart, use_container_width=True,
                             key=f"chart_{int(datetime.now().timestamp()*1000)}")
 
-        if isinstance(result_data, pd.DataFrame):
+        if isinstance(response.result_data, pd.DataFrame):
             with st.expander("📊 Result data"):
-                st.dataframe(result_data, use_container_width=True)
+                st.dataframe(response.result_data, use_container_width=True)
 
         # Persist to session
-        msg = {"role": "assistant", "content": answer, "skill": skill_name}
+        msg = {"role": "assistant", "content": answer, "skill": response.skill}
         if code:
             msg["code"] = code
         st.session_state.messages.append(msg)
@@ -340,7 +309,7 @@ def handle_message(prompt: str):
 
 def main():
     st.title("🤖 AI Analytics Assistant")
-    st.markdown("### 💬 Intelligent Q&A — Thin Harness, Fat Skills")
+    st.markdown("### 💬 Skill-routed AI Analytics Assistant")
 
     # Initialise session state
     if "session_id" not in st.session_state:

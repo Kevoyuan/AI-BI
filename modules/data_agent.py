@@ -1,8 +1,11 @@
 """
 Data Analysis Agent — Code Generation + Execution
 
-Generates Python analysis code via an LLM, executes it in a sandboxed
-namespace, and summarises the result in natural language.
+Generates Python analysis code via an LLM, executes it in a controlled
+execution namespace, and summarises the result in natural language.
+
+The namespace is not an operating-system sandbox or a security boundary;
+generated code runs in the application's Python process.
 
 Key features:
 - Skill-specific system prompts (routes to the appropriate SKILL.md)
@@ -226,8 +229,9 @@ class DataAnalysisAgent:
         dataframes: Dict[str, pd.DataFrame],
     ) -> Dict[str, Any]:
         """
-        Execute generated code in a sandboxed namespace.
+        Execute generated code in a controlled execution namespace.
         The code may set `result` (scalar or DataFrame) and/or `fig` (Plotly figure).
+        This is not an operating-system sandbox or a security boundary.
         """
         namespace = {
             "dfs":      dataframes,

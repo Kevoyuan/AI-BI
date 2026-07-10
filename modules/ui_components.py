@@ -17,7 +17,7 @@ def create_sidebar_info() -> None:
             "A Streamlit + AI analytics platform with:\n"
             "- Multi-month SQLite data store\n"
             "- Modular pyecharts visualisations\n"
-            "- LLM-powered Q&A (Thin Harness, Fat Skills)\n"
+            "- Skill-routed LLM-powered Q&A\n"
             "- ML profit forecasting (Prophet + SARIMA + XGBoost)\n"
         )
         st.divider()

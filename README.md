@@ -36,7 +36,7 @@ User query → Streamlit UI → RouterAgent → selected skill
 Historical profit → Prophet + SARIMA + XGBoost → weighted forecast
 ```
 
-The current AI Assistant page combines presentation and orchestration. Its routing and analysis logic lives in reusable agents, but the page is not yet a fully thin presentation layer. The intended direction is a thin presentation layer / orchestration pattern without introducing extra services or infrastructure.
+The AI Assistant page coordinates Streamlit UI, session/data loading, and rendering. Its chat Resolve → Execute workflow is delegated to `application/chat_service.py`, while routing and analysis remain in reusable agents.
 
 Detailed design notes:
 
@@ -51,7 +51,7 @@ Detailed design notes:
 ### 1. Install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/AI-BI.git
+git clone https://github.com/Kevoyuan/AI-BI.git
 cd AI-BI
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
