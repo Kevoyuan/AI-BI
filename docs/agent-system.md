@@ -70,6 +70,12 @@ It validates the selected skill against the live registry and filters table name
 
 The routing decision is probabilistic when a live LLM is used. The repository tests routing behavior with deterministic mocked provider responses; they do not measure live-model routing accuracy.
 
+## Router evaluation
+
+`evals/router_cases.yaml` contains 40 labelled examples across all five skills. `evals/run_router_eval.py --mode mock` routes each case through `RouterAgent` with a provider that returns the case label. This checks case loading, report generation, per-skill accounting, and confusion output; it intentionally does not measure model quality.
+
+`evals/run_router_eval.py --mode live` uses the configured provider and reports the same metrics against the live LLM. It exits with a clear credential message when the selected provider key is missing. Results depend on the provider, model, prompt, and case set, so they should be treated as a local snapshot rather than a benchmark.
+
 ## Text path
 
 `ContextBuilder` computes a Markdown summary from loaded data, including recent revenue, order count, average check, waste, membership recharge, targets, and financial parameters when the relevant columns exist. The daily-report skill prompt and this context become the system prompt for a streaming provider call.

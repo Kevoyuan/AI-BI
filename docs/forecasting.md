@@ -54,6 +54,16 @@ When enabled and enough rows exist, the function holds out the last `backtest_da
 
 Prophet also attempts its own cross-validation using a 14-day initial window, a 7-day period, and a 7-day horizon. Failures in that diagnostic step produce `NaN` metrics without discarding an otherwise successful forecast.
 
+### Baseline comparison
+
+`evals/run_forecast_eval.py` creates a seeded synthetic 140-day profit series, holds out the final seven days, and compares:
+
+- seasonal naive: repeat the same weekday from the prior week;
+- seven-day moving average;
+- current ensemble: `predict_cumulative_profit()` with its existing model availability and weight rules.
+
+The script reports MAE, RMSE, and MAPE. This is a single final holdout, not rolling-origin validation. In the latest local run with seed 42, the current ensemble scored MAE 31.19, RMSE 35.60, and MAPE 2.39%, versus seasonal naive at 40.17 / 50.68 / 3.02% and moving average at 71.55 / 95.59 / 5.16%. This result is a reproducible snapshot on one synthetic series, not evidence of generalization or financial forecasting validity; rerun the script when dependencies or evaluation inputs change.
+
 ## Important limitations
 
 - The current pytest suite does not directly test `modules/prediction.py`.

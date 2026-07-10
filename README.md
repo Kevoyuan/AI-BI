@@ -91,6 +91,16 @@ pytest
 
 Agent tests use mocked LLM providers and do not require an API key.
 
+## Evaluation
+
+The repository includes local evaluation scripts:
+
+- `PYTHONPATH=. python3 evals/run_router_eval.py --mode mock` validates the router evaluation harness with labelled mock responses; its 100% result is not live LLM quality.
+- `PYTHONPATH=. python3 evals/run_router_eval.py --mode live` measures router accuracy against the labelled cases when provider credentials are configured.
+- `PYTHONPATH=. python3 evals/run_forecast_eval.py` compares the current ensemble with seasonal-naive and seven-day moving-average baselines on seeded synthetic data.
+
+These outputs are local evidence and reproducibility aids, not production monitoring or financial validation.
+
 ## Evidence / Metrics
 
 These figures are repository-level evidence, not runtime or production claims:

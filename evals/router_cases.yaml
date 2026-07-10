@@ -1,0 +1,124 @@
+- query: "What was yesterday's revenue?"
+  expected_skill: daily_report
+  notes: simple prepared metric
+- query: "Did we hit yesterday's target?"
+  expected_skill: daily_report
+  notes: target achievement
+- query: "What is the current waste rate?"
+  expected_skill: daily_report
+  notes: prepared waste metric
+- query: "How many transactions did we have yesterday?"
+  expected_skill: daily_report
+  notes: prepared order metric
+- query: "What was yesterday's average check?"
+  expected_skill: daily_report
+  notes: prepared average check
+- query: "Summarize yesterday's operating performance."
+  expected_skill: daily_report
+  notes: daily summary
+- query: "How much did we collect through membership recharge yesterday?"
+  expected_skill: daily_report
+  notes: prepared membership metric
+- query: "Show yesterday's payment method breakdown."
+  expected_skill: daily_report
+  notes: prepared payment metric
+
+- query: "Compare revenue on rainy versus sunny days."
+  expected_skill: deep_analysis
+  notes: cross-table comparison
+- query: "Find the five products with the highest waste rate."
+  expected_skill: deep_analysis
+  notes: aggregation and ranking
+- query: "What is the correlation between orders and revenue?"
+  expected_skill: deep_analysis
+  notes: correlation
+- query: "Compare weekday and weekend sales totals."
+  expected_skill: deep_analysis
+  notes: grouped comparison
+- query: "Which products have declining sales over the last month?"
+  expected_skill: deep_analysis
+  notes: trend analysis
+- query: "Analyze waste by product category."
+  expected_skill: deep_analysis
+  notes: grouped waste analysis
+- query: "Join sales and weather to explain low-revenue days."
+  expected_skill: deep_analysis
+  notes: multi-table analysis
+- query: "Calculate the average order value by category."
+  expected_skill: deep_analysis
+  notes: grouped metric
+
+- query: "Plot sales by category for last month."
+  expected_skill: visualization
+  notes: explicit chart request
+- query: "Draw a line chart of the seven-day sales trend."
+  expected_skill: visualization
+  notes: explicit line chart
+- query: "Show revenue as a bar chart by weekday."
+  expected_skill: visualization
+  notes: explicit bar chart
+- query: "Create a pie chart of payment methods."
+  expected_skill: visualization
+  notes: explicit pie chart
+- query: "Visualize hourly sales across the month."
+  expected_skill: visualization
+  notes: heatmap-style visualization
+- query: "Make a scatter plot of orders and revenue."
+  expected_skill: visualization
+  notes: explicit scatter plot
+- query: "Chart the top ten products by revenue."
+  expected_skill: visualization
+  notes: ranked chart
+- query: "Plot waste amount over time."
+  expected_skill: visualization
+  notes: time-series chart
+
+- query: "Forecast tomorrow's revenue."
+  expected_skill: forecast_alert
+  notes: short-term forecast
+- query: "What will sales look like next week?"
+  expected_skill: forecast_alert
+  notes: weekly forecast
+- query: "Did revenue show an unusual spike yesterday?"
+  expected_skill: forecast_alert
+  notes: anomaly detection
+- query: "Are sales declining for three consecutive days?"
+  expected_skill: forecast_alert
+  notes: decline alert
+- query: "How might rain affect tomorrow's sales?"
+  expected_skill: forecast_alert
+  notes: weather impact
+- query: "Predict next month's revenue trend."
+  expected_skill: forecast_alert
+  notes: longer forecast
+- query: "Flag abnormal fluctuations in daily revenue."
+  expected_skill: forecast_alert
+  notes: anomaly detection
+- query: "What operational risks does the current sales trend suggest?"
+  expected_skill: forecast_alert
+  notes: risk signal
+
+- query: "What was yesterday's gross profit?"
+  expected_skill: profit_cost
+  notes: profit calculation
+- query: "Calculate the cost percentage for this sample."
+  expected_skill: profit_cost
+  notes: cost metric
+- query: "What is our break-even revenue?"
+  expected_skill: profit_cost
+  notes: break-even analysis
+- query: "Estimate the return on the startup investment."
+  expected_skill: profit_cost
+  notes: ROI analysis
+- query: "How much fixed cost do we need to cover each day?"
+  expected_skill: profit_cost
+  notes: fixed cost analysis
+- query: "Break down the profit formula for this month."
+  expected_skill: profit_cost
+  notes: profit explanation
+- query: "Compare operating cost and raw material cost."
+  expected_skill: profit_cost
+  notes: cost comparison
+- query: "When will the initial investment break even?"
+  expected_skill: profit_cost
+  notes: investment break-even
