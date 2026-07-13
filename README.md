@@ -106,12 +106,12 @@ These outputs are local evidence and reproducibility aids, not production monito
 These figures are repository-level evidence, not runtime or production claims:
 
 | Evidence | Current repository |
-|---|---:|
+|---|---|
 | Streamlit pages | 4, including `app.py` |
 | Markdown-defined analytical skills | 5 |
-| Agent/chat test cases | 30 |
-| Test files | 4 |
-| Python source size | ~6.8K lines |
+| Tests | Router, data-agent, chat-service, AI-chat, and evaluation utility tests |
+| Evaluation cases | 40 labelled router cases across all five skills |
+| Forecast evaluation | Seasonal naive, seven-day moving average, and current ensemble |
 | Forecast implementations | Prophet, SARIMA, XGBoost + moving-average fallback |
 
 Not currently demonstrated by this repository: deployment infrastructure, user authentication, process isolation for generated code, production monitoring, or load/performance benchmarks.
