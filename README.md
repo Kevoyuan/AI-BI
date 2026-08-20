@@ -33,7 +33,7 @@
 ## 🏗️ System Architecture Overview
 
 <p align="center">
-  <img src="docs/images/system_architecture.jpg" alt="AI-BI System Architecture Overview" width="100%" />
+  <img src="docs/images/system_architecture.svg" alt="AI-BI System Architecture Overview" width="100%" />
 </p>
 
 <details>
