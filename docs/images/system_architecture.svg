@@ -1,102 +1,71 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="980" viewBox="0 0 1600 980" role="img" aria-labelledby="title desc">
-  <title id="title">AI-BI system architecture</title>
-  <desc id="desc">Engineering documentation diagram showing presentation, service, LangGraph orchestration, tools, and four-tier resilient data layers.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1020" viewBox="0 0 1600 1020" role="img" aria-labelledby="title desc">
+  <title id="title">AI-BI system architecture overview</title>
+  <desc id="desc">Engineering documentation diagram whose directed edges are validated against the README raw Mermaid.</desc>
   <defs>
     <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L10,5 L0,10 z" fill="#667085"/></marker>
-    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L10,5 L0,10 z" fill="#3156D3"/></marker>
     <style>
-      .sans{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-      .mono{font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace}
-      .eyebrow{font-size:18px;font-weight:700;letter-spacing:1.8px;fill:#667085}
-      .title{font-size:40px;font-weight:720;fill:#16181D}
-      .subtitle{font-size:19px;font-weight:450;fill:#667085}
-      .layer{font-size:17px;font-weight:740;fill:#344054;letter-spacing:.45px}
-      .card-title{font-size:21px;font-weight:700;fill:#16181D}
-      .code{font-size:14px;font-weight:650;fill:#3156D3}
-      .body{font-size:14px;font-weight:450;fill:#667085}
-      .small{font-size:13px;font-weight:600;fill:#667085}
-      .pill{font-size:12px;font-weight:650;fill:#344054}
-      .edge{fill:none;stroke:#98A2B3;stroke-width:2;marker-end:url(#arrow)}
-      .edge-blue{fill:none;stroke:#3156D3;stroke-width:2.2;marker-end:url(#arrow-blue)}
-      .edge-dash{fill:none;stroke:#8B7BCB;stroke-width:1.9;stroke-dasharray:7 7;marker-end:url(#arrow)}
+      .sans{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.mono{font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace}.eyebrow{font-size:18px;font-weight:700;letter-spacing:1.8px;fill:#667085}.title{font-size:40px;font-weight:720;fill:#16181D}.subtitle{font-size:18px;font-weight:450;fill:#667085}.layer{font-size:15px;font-weight:700;fill:#344054;letter-spacing:.5px}.node-title{font-size:20px;font-weight:700;fill:#16181D}.body{font-size:14px;font-weight:450;fill:#475467}.small{font-size:13px;font-weight:600;fill:#667085}.tool{font-size:12px;font-weight:650;fill:#344054}.edge{fill:none;stroke:#667085;stroke-width:2.2;marker-end:url(#arrow)}.edge2{fill:none;stroke:#667085;stroke-width:2.2}.edge-label{font-size:12px;font-weight:600;fill:#667085}
     </style>
   </defs>
-  <rect width="1600" height="980" fill="#FBFBFA"/>
-  <rect x="48" y="42" width="1504" height="896" rx="18" fill="#FFFFFF" stroke="#E4E7EC"/>
-  <text x="88" y="92" class="sans eyebrow">AI-BI / SYSTEM ARCHITECTURE</text>
-  <text x="88" y="139" class="sans title">From dashboard interaction to resilient data access</text>
-  <text x="88" y="176" class="sans subtitle">A lightweight web surface feeds deterministic BI services and a LangGraph ReAct loop over a four-tier offline-first data layer.</text>
-  <text x="88" y="248" class="sans layer">01 · PRESENTATION</text>
-  <text x="88" y="398" class="sans layer">02 · SERVICE &amp; API</text>
-  <text x="88" y="548" class="sans layer">03 · LANGGRAPH CORE</text>
-  <text x="88" y="778" class="sans layer">04 · RESILIENT DATA</text>
-  <line x1="88" y1="266" x2="1512" y2="266" stroke="#EAECF0"/>
-  <line x1="88" y1="416" x2="1512" y2="416" stroke="#EAECF0"/>
-  <line x1="88" y1="566" x2="1512" y2="566" stroke="#EAECF0"/>
-  <line x1="88" y1="796" x2="1512" y2="796" stroke="#EAECF0"/>
-  <rect x="300" y="292" width="530" height="82" rx="10" fill="#F5F7FF" stroke="#B8C4EE"/>
-  <text x="326" y="323" class="sans card-title">Modern Web Dashboard</text>
-  <text x="326" y="347" class="mono code">HTML5 · CSS3 · Vanilla JS · ECharts 5</text>
-  <text x="326" y="367" class="sans body">Operational KPIs, charts, filters and executive summaries</text>
-  <rect x="858" y="292" width="520" height="82" rx="10" fill="#F7F5FC" stroke="#C9C2E6"/>
-  <text x="884" y="323" class="sans card-title">AI Assistant Workspace</text>
-  <text x="884" y="347" class="mono code">web_dashboard/ai.js · ai.css</text>
-  <text x="884" y="367" class="sans body">Conversation UI, SSE stream and rich artifact renderer</text>
-  <rect x="300" y="442" width="530" height="82" rx="10" fill="#F8FAFC" stroke="#D8DEE8"/>
-  <text x="326" y="473" class="sans card-title">Python HTTP / SSE Server</text>
-  <text x="326" y="497" class="mono code">web_dashboard_server.py</text>
-  <text x="326" y="517" class="sans body">Request routing, streaming responses and API aggregation</text>
-  <rect x="858" y="442" width="520" height="82" rx="10" fill="#F8FAFC" stroke="#D8DEE8"/>
-  <text x="884" y="473" class="sans card-title">20+ Metric Aggregation Engine</text>
-  <text x="884" y="497" class="mono code">modules/dashboard_api.py</text>
-  <text x="884" y="517" class="sans body">Deterministic dashboard metrics across sales, members, loss and weather</text>
-  <rect x="300" y="592" width="340" height="142" rx="10" fill="#F5F7FF" stroke="#B8C4EE"/>
-  <text x="326" y="623" class="sans small">ORCHESTRATOR</text>
-  <text x="326" y="654" class="sans card-title">LangGraph StateGraph</text>
-  <text x="326" y="678" class="mono code">START -&gt; answer -&gt; tools -&gt; ... -&gt; END</text>
-  <text x="326" y="704" class="sans body">ReAct routing, tool decisions and SSE message streaming</text>
-  <rect x="662" y="592" width="248" height="142" rx="10" fill="#F7F5FC" stroke="#C9C2E6"/>
-  <text x="688" y="623" class="sans small">CHECKPOINTER</text>
-  <text x="688" y="654" class="sans card-title">MemorySaver</text>
-  <text x="688" y="678" class="mono code">thread_id</text>
-  <text x="688" y="704" class="sans body">Thread-isolated state persistence and recovery</text>
-  <rect x="932" y="592" width="446" height="142" rx="10" fill="#FFFCF6" stroke="#E6D5B1"/>
-  <text x="958" y="623" class="sans small">TOOLNODE · DATA ACCESS + 6 DOMAIN SKILLS</text>
-  <text x="958" y="654" class="sans card-title">Parameterized analysis tools</text>
-  <rect x="958" y="672" width="126" height="26" rx="6" fill="#FFFFFF" stroke="#E8D9BB"/><text x="1021" y="690" text-anchor="middle" class="sans pill">fetch data</text>
-  <rect x="1094" y="672" width="96" height="26" rx="6" fill="#FFFFFF" stroke="#E8D9BB"/><text x="1142" y="690" text-anchor="middle" class="sans pill">forecast</text>
-  <rect x="1200" y="672" width="96" height="26" rx="6" fill="#FFFFFF" stroke="#E8D9BB"/><text x="1248" y="690" text-anchor="middle" class="sans pill">weather</text>
-  <rect x="1306" y="672" width="50" height="26" rx="6" fill="#FFFFFF" stroke="#E8D9BB"/><text x="1331" y="690" text-anchor="middle" class="sans pill">abc</text>
-  <rect x="958" y="706" width="96" height="26" rx="6" fill="#FFFFFF" stroke="#E8D9BB"/><text x="1006" y="724" text-anchor="middle" class="sans pill">basket</text>
-  <rect x="1064" y="706" width="96" height="26" rx="6" fill="#FFFFFF" stroke="#E8D9BB"/><text x="1112" y="724" text-anchor="middle" class="sans pill">hourly</text>
-  <rect x="1170" y="706" width="112" height="26" rx="6" fill="#FFFFFF" stroke="#E8D9BB"/><text x="1226" y="724" text-anchor="middle" class="sans pill">recharge</text>
-  <rect x="300" y="822" width="196" height="72" rx="9" fill="#FFFFFF" stroke="#D8DEE8"/>
-  <text x="326" y="850" class="sans card-title" font-size="18">L1 · Memory</text><text x="326" y="875" class="sans body">Runtime cache</text>
-  <rect x="510" y="822" width="196" height="72" rx="9" fill="#FFFFFF" stroke="#D8DEE8"/>
-  <text x="536" y="850" class="sans card-title" font-size="18">L2 · Parquet</text><text x="536" y="875" class="sans body">Local disk cache</text>
-  <rect x="720" y="822" width="220" height="72" rx="9" fill="#FFFFFF" stroke="#D8DEE8"/>
-  <text x="746" y="850" class="sans card-title" font-size="18">L3 · Prewarmed</text><text x="746" y="875" class="sans body">Sanitized offline cache</text>
-  <rect x="954" y="822" width="196" height="72" rx="9" fill="#FFFFFF" stroke="#D8DEE8"/>
-  <text x="980" y="850" class="sans card-title" font-size="18">L4 · SQLite</text><text x="980" y="875" class="sans body">Synthetic fallback</text>
-  <rect x="1164" y="822" width="214" height="72" rx="9" fill="#F7F5FC" stroke="#C9C2E6"/>
-  <text x="1190" y="850" class="sans card-title" font-size="18">Open-Meteo</text><text x="1190" y="875" class="sans body">Weather API</text>
-  <path d="M565 374 V430" class="edge-blue"/>
-  <text x="578" y="407" class="sans small">GET /api/dashboard</text>
-  <path d="M1118 374 V412 H565 V430" class="edge-dash"/>
-  <text x="865" y="405" class="sans small">POST /api/ai/chat · SSE</text>
-  <path d="M830 483 H846" class="edge"/>
-  <path d="M565 524 V580 H470 V580" class="edge-blue"/>
-  <path d="M640 620 V574 H920 V620" class="edge"/>
-  <path d="M640 704 H650" class="edge-dash" marker-start="url(#arrow)"/>
-  <path d="M786 592 V558 H470 V580" class="edge-dash"/>
-  <path d="M1155 734 V774 H608 V810" class="edge"/>
-  <path d="M1118 524 V774 H830 V810" class="edge"/>
-  <path d="M1118 524 V774 H1271 V810" class="edge-dash"/>
-  <path d="M496 858 H498" class="edge"/>
-  <path d="M706 858 H708" class="edge"/>
-  <path d="M940 858 H942" class="edge"/>
-  <line x1="88" y1="918" x2="1512" y2="918" stroke="#EAECF0"/>
-  <text x="88" y="944" class="sans small">Primary data path:</text>
-  <text x="212" y="944" class="mono small" fill="#344054">memory -&gt; parquet -&gt; prewarmed -&gt; synthetic fallback</text>
-  <text x="1512" y="944" text-anchor="end" class="sans small">Weather remains an external, independently fault-tolerant source</text>
+  <rect width="1600" height="1020" fill="#FBFBFA"/>
+  <rect x="48" y="42" width="1504" height="936" rx="18" fill="#FFFFFF" stroke="#E4E7EC"/>
+  <text x="88" y="92" class="sans eyebrow">AI-BI / OVERVIEW</text>
+  <text x="88" y="139" class="sans title">System architecture overview</text>
+  <text x="88" y="176" class="sans subtitle">Every arrow below maps 1:1 to an edge in the raw Mermaid source.</text>
+  <rect x="88" y="220" width="1424" height="114" rx="14" fill="#F8FBFF" stroke="#B8C4EE"/>
+  <text x="116" y="254" class="sans layer">PRESENTATION &amp; INTERACTION</text>
+  <rect x="430" y="240" width="330" height="72" rx="10" fill="#FFFFFF" stroke="#D8DEE8"/>
+  <text x="454" y="270" class="sans node-title">Modern Web Dashboard</text><text x="454" y="295" class="sans body">HTML5 · CSS3 · Vanilla JS · ECharts 5</text>
+  <rect x="900" y="240" width="330" height="72" rx="10" fill="#FFFFFF" stroke="#D8DEE8"/>
+  <text x="924" y="270" class="sans node-title">AI Assistant Workspace</text><text x="924" y="295" class="sans body">Chat drawer · artifact renderer</text>
+  <rect x="88" y="366" width="1424" height="114" rx="14" fill="#F6FBF8" stroke="#B7DCC5"/>
+  <text x="116" y="400" class="sans layer">SERVICE &amp; API AGGREGATION</text>
+  <rect x="430" y="386" width="330" height="72" rx="10" fill="#FFFFFF" stroke="#D8DEE8"/>
+  <text x="454" y="416" class="sans node-title">web_dashboard_server.py</text><text x="454" y="441" class="sans body">HTTP + SSE streaming server</text>
+  <rect x="900" y="386" width="330" height="72" rx="10" fill="#FFFFFF" stroke="#D8DEE8"/>
+  <text x="924" y="416" class="sans node-title">modules/dashboard_api.py</text><text x="924" y="441" class="sans body">20+ dimensional BI aggregation engine</text>
+  <rect x="88" y="512" width="1424" height="202" rx="14" fill="#FBF9FF" stroke="#C9C2E6"/>
+  <text x="116" y="546" class="sans layer">LANGGRAPH REACT STATE MACHINE CORE</text>
+  <rect x="430" y="566" width="270" height="94" rx="10" fill="#FFFFFF" stroke="#D8DEE8"/>
+  <text x="454" y="598" class="sans node-title">LangGraph StateGraph</text><text x="454" y="624" class="sans body">START → answer → tools_condition</text><text x="454" y="646" class="sans body">→ tools → END</text>
+  <rect x="760" y="566" width="210" height="94" rx="10" fill="#FFFFFF" stroke="#D8DEE8"/>
+  <text x="784" y="598" class="sans node-title">MemorySaver</text><text x="784" y="624" class="sans body">thread_id isolation</text><text x="784" y="646" class="sans body">checkpointer persistence</text>
+  <rect x="1050" y="550" width="414" height="126" rx="10" fill="#FFFFFF" stroke="#D8DEE8"/>
+  <text x="1074" y="582" class="sans node-title">ToolNode / Domain Skills</text>
+  <rect x="1074" y="598" width="122" height="24" rx="5" fill="#F8FAFC" stroke="#E5E7EB"/><text x="1135" y="614" text-anchor="middle" class="sans tool">fetch_pospal_data</text>
+  <rect x="1206" y="598" width="72" height="24" rx="5" fill="#F8FAFC" stroke="#E5E7EB"/><text x="1242" y="614" text-anchor="middle" class="sans tool">forecast</text>
+  <rect x="1288" y="598" width="72" height="24" rx="5" fill="#F8FAFC" stroke="#E5E7EB"/><text x="1324" y="614" text-anchor="middle" class="sans tool">weather</text>
+  <rect x="1370" y="598" width="70" height="24" rx="5" fill="#F8FAFC" stroke="#E5E7EB"/><text x="1405" y="614" text-anchor="middle" class="sans tool">basket</text>
+  <rect x="1074" y="632" width="68" height="24" rx="5" fill="#F8FAFC" stroke="#E5E7EB"/><text x="1108" y="648" text-anchor="middle" class="sans tool">hourly</text>
+  <rect x="1152" y="632" width="52" height="24" rx="5" fill="#F8FAFC" stroke="#E5E7EB"/><text x="1178" y="648" text-anchor="middle" class="sans tool">abc</text>
+  <rect x="1214" y="632" width="86" height="24" rx="5" fill="#F8FAFC" stroke="#E5E7EB"/><text x="1257" y="648" text-anchor="middle" class="sans tool">recharge</text>
+  <rect x="88" y="746" width="1424" height="160" rx="14" fill="#FCFCFC" stroke="#D0D5DD"/>
+  <text x="116" y="780" class="sans layer">4-TIER RESILIENT DATA LAYER</text>
+  <rect x="390" y="802" width="160" height="68" rx="10" fill="#FFFFFF" stroke="#D8DEE8"/><text x="470" y="829" text-anchor="middle" class="sans node-title" font-size="18">L1 Memory</text><text x="470" y="852" text-anchor="middle" class="sans body">runtime cache</text>
+  <rect x="570" y="802" width="160" height="68" rx="10" fill="#FFFFFF" stroke="#D8DEE8"/><text x="650" y="829" text-anchor="middle" class="sans node-title" font-size="18">L2 Parquet</text><text x="650" y="852" text-anchor="middle" class="sans body">local disk cache</text>
+  <rect x="750" y="802" width="190" height="68" rx="10" fill="#FFFFFF" stroke="#D8DEE8"/><text x="845" y="829" text-anchor="middle" class="sans node-title" font-size="18">L3 Prewarmed</text><text x="845" y="852" text-anchor="middle" class="sans body">offline cache</text>
+  <rect x="960" y="802" width="170" height="68" rx="10" fill="#FFFFFF" stroke="#D8DEE8"/><text x="1045" y="829" text-anchor="middle" class="sans node-title" font-size="18">L4 SQLite</text><text x="1045" y="852" text-anchor="middle" class="sans body">synthetic fallback</text>
+  <rect x="1190" y="802" width="210" height="68" rx="10" fill="#FFFFFF" stroke="#D8DEE8"/><text x="1295" y="829" text-anchor="middle" class="sans node-title" font-size="18">Open-Meteo API</text><text x="1295" y="852" text-anchor="middle" class="sans body">modules/weather_api.py</text>
+  <!-- edge: WebDash -> WebServer -->
+  <path d="M595 312 V374" class="edge"/><text x="608" y="348" class="sans edge-label">GET /api/dashboard</text>
+  <!-- edge: AIDrawer -> WebServer -->
+  <path d="M1065 312 V342 H650 V374" class="edge"/><text x="805" y="334" class="sans edge-label">POST /api/ai/chat (SSE)</text>
+  <!-- edge: WebServer -> DashAPI -->
+  <path d="M760 422 H888" class="edge"/><text x="804" y="408" class="sans edge-label">aggregate</text>
+  <!-- edge: WebServer -> Graph -->
+  <path d="M565 458 V554" class="edge"/><text x="578" y="512" class="sans edge-label">AI request</text>
+  <!-- edge: Graph -> Memory -->
+  <path d="M700 598 H748" class="edge"/>
+  <!-- edge: Memory -> Graph -->
+  <path d="M760 628 H712" class="edge"/><text x="708" y="684" class="sans edge-label">read / write state</text>
+  <!-- edge: Graph -> ToolsNode -->
+  <path d="M700 646 V690 H1030 V646 H1038" class="edge"/><text x="830" y="682" class="sans edge-label">tool dispatch</text>
+  <!-- edge: ToolsNode -> DataLayer -->
+  <path d="M1257 676 V734" class="edge"/><text x="1270" y="714" class="sans edge-label">tool data access</text>
+  <!-- edge: DashAPI -> DataLayer -->
+  <path d="M1020 458 V722 H890 V734" class="edge"/><text x="1034" y="612" class="sans edge-label">BI data access</text>
+  <!-- edge: DashAPI -> OpenMeteo -->
+  <path d="M1110 458 V494 H1480 V780 H1412" class="edge"/><text x="1230" y="486" class="sans edge-label">weather lookup</text>
+  <line x1="88" y1="936" x2="1512" y2="936" stroke="#EAECF0"/>
+  <text x="88" y="964" class="sans small">Edge contract: 9 Mermaid relationships · 9 diagram relationships · no inferred cross-layer arrows.</text>
 </svg>
