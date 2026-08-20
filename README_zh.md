@@ -33,6 +33,13 @@
 
 ## 🏗️ 全系统架构总览 (System Architecture)
 
+<p align="center">
+  <img src="docs/images/system_architecture.jpg" alt="AI-BI 系统架构总览" width="100%" />
+</p>
+
+<details>
+<summary><b>🔍 查看原始 Mermaid 架构图代码</b></summary>
+
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'background': '#ffffff', 'primaryColor': '#EEF2FF', 'primaryTextColor': '#1E293B', 'primaryBorderColor': '#6366F1', 'lineColor': '#475569', 'secondaryColor': '#F0FDF4', 'tertiaryColor': '#FFFFFF', 'edgeLabelBackground':'#ffffff' }}}%%
 flowchart TB
@@ -86,6 +93,8 @@ flowchart TB
     DashAPI --> OpenMeteo
 ```
 
+</details>
+
 ---
 
 ## 🤖 LangGraph 状态机深度架构 (LangGraph StateGraph Architecture)
@@ -93,6 +102,13 @@ flowchart TB
 AI 经营助手完全基于 **LangGraph StateGraph** 构建，采用 **ReAct 循环（Thought → Tool Call → Observation → Answer）**，实现了从意图理解、工具调度、会话记忆到流式工件输出的完整闭环。
 
 ### 1. 状态机拓扑与执行流图
+
+<p align="center">
+  <img src="docs/images/langgraph_topology.jpg" alt="AI-BI LangGraph ReAct 状态机拓扑图" width="100%" />
+</p>
+
+<details>
+<summary><b>🔍 查看原始 Mermaid 状态机代码</b></summary>
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'background': '#ffffff', 'primaryColor': '#EEF2FF', 'primaryTextColor': '#1E293B', 'primaryBorderColor': '#4F46E5', 'lineColor': '#475569', 'secondaryColor': '#FFFBEB', 'tertiaryColor': '#FFFFFF', 'edgeLabelBackground':'#ffffff' }}}%%
@@ -132,6 +148,8 @@ flowchart TD
 
     checkTools -- "无工具调用 / 完成推理" --> END(["🏁 END<br/>• SSE 逐字推流到客户端<br/>• 原生渲染 ECharts / Metrics / Compare"]):::startEnd
 ```
+
+</details>
 
 ### 2. 状态机状态契约 (`AgentState`)
 

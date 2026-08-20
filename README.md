@@ -32,6 +32,13 @@
 
 ## 🏗️ System Architecture Overview
 
+<p align="center">
+  <img src="docs/images/system_architecture.jpg" alt="AI-BI System Architecture Overview" width="100%" />
+</p>
+
+<details>
+<summary><b>🔍 View Raw Mermaid Diagram</b></summary>
+
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'background': '#ffffff', 'primaryColor': '#EEF2FF', 'primaryTextColor': '#1E293B', 'primaryBorderColor': '#6366F1', 'lineColor': '#475569', 'secondaryColor': '#F0FDF4', 'tertiaryColor': '#FFFFFF', 'edgeLabelBackground':'#ffffff' }}}%%
 flowchart TB
@@ -85,6 +92,8 @@ flowchart TB
     DashAPI --> OpenMeteo
 ```
 
+</details>
+
 ---
 
 ## 🤖 LangGraph StateGraph Architecture
@@ -92,6 +101,13 @@ flowchart TB
 The AI business assistant is orchestrated using **LangGraph StateGraph**, adopting a native **ReAct execution loop (Thought → Tool Call → Observation → Answer)** with token-by-token Server-Sent Events (SSE) streaming.
 
 ### 1. State Machine Topology & Execution Flow
+
+<p align="center">
+  <img src="docs/images/langgraph_topology.jpg" alt="AI-BI LangGraph ReAct State Machine Topology" width="100%" />
+</p>
+
+<details>
+<summary><b>🔍 View Raw Mermaid State Machine</b></summary>
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'background': '#ffffff', 'primaryColor': '#EEF2FF', 'primaryTextColor': '#1E293B', 'primaryBorderColor': '#4F46E5', 'lineColor': '#475569', 'secondaryColor': '#FFFBEB', 'tertiaryColor': '#FFFFFF', 'edgeLabelBackground':'#ffffff' }}}%%
@@ -131,6 +147,8 @@ flowchart TD
 
     checkTools -- "No Tool Calls / Final Inference" --> END(["🏁 END<br/>• Token-by-token SSE streaming to browser<br/>• Native rendering of ECharts / Metrics / Compare"]):::startEnd
 ```
+
+</details>
 
 ### 2. State Contract Definition (`AgentState`)
 
