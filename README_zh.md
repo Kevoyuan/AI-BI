@@ -75,8 +75,8 @@ flowchart TB
         OpenMeteo["Open-Meteo 免费气象接口 (modules/weather_api.py)"]:::data
     end
 
-    WebDash -->|GET /api/dashboard| WebServer
-    AIDrawer -->|POST /api/ai/chat (SSE)| WebServer
+    WebDash -->|"GET /api/dashboard"| WebServer
+    AIDrawer -->|"POST /api/ai/chat (SSE)"| WebServer
     WebServer --> DashAPI
     WebServer --> Graph
     Graph <--> Memory
@@ -117,8 +117,8 @@ flowchart TD
 
     subgraph ToolsRegistry [" 🧰 参数化工具集 (TOOLS) "]
         direction TB
-        T1["📊 fetch_pospal_data(date_spec, scope='digest'|'chart'|'full', archive=False)"]:::toolItem
-        T2["📈 run_analysis(analysis='forecast', horizon='tomorrow'|'next_week')"]:::toolItem
+        T1["📊 fetch_pospal_data(date_spec, scope='digest' / 'chart' / 'full', archive=False)"]:::toolItem
+        T2["📈 run_analysis(analysis='forecast', horizon='tomorrow' / 'next_week')"]:::toolItem
         T3["⛅ run_analysis(analysis='weather')"]:::toolItem
         T4["🛒 run_analysis(analysis='basket', target_product=...)"]:::toolItem
         T5["⏰ run_analysis(analysis='hourly')"]:::toolItem
