@@ -34,7 +34,7 @@
 ## 🏗️ 全系统架构总览 (System Architecture)
 
 <p align="center">
-  <img src="docs/images/system_architecture.svg" alt="AI-BI 系统架构总览" width="100%" />
+  <img src="docs/images/system_architecture.png" alt="AI-BI 系统架构总览" width="100%" />
 </p>
 
 <details>
@@ -104,7 +104,7 @@ AI 经营助手完全基于 **LangGraph StateGraph** 构建，采用 **ReAct 循
 ### 1. 状态机拓扑与执行流图
 
 <p align="center">
-  <img src="docs/images/langgraph_topology.svg" alt="AI-BI LangGraph ReAct 状态机拓扑图" width="100%" />
+  <img src="docs/images/langgraph_topology.png" alt="AI-BI LangGraph ReAct 状态机拓扑图" width="100%" />
 </p>
 
 <details>
@@ -152,10 +152,6 @@ flowchart TD
 </details>
 
 ### 2. 状态机状态契约 (`AgentState`)
-
-<p align="center">
-  <img src="docs/images/agent_state_contract.svg" alt="AI-BI LangGraph 运行时状态契约" width="100%" />
-</p>
 
 ```python
 class AgentState(TypedDict):
