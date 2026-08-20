@@ -103,7 +103,7 @@ The AI business assistant is orchestrated using **LangGraph StateGraph**, adopti
 ### 1. State Machine Topology & Execution Flow
 
 <p align="center">
-  <img src="docs/images/langgraph_topology.jpg" alt="AI-BI LangGraph ReAct State Machine Topology" width="100%" />
+  <img src="docs/images/langgraph_topology.svg" alt="AI-BI LangGraph ReAct State Machine Topology" width="100%" />
 </p>
 
 <details>
@@ -151,6 +151,10 @@ flowchart TD
 </details>
 
 ### 2. State Contract Definition (`AgentState`)
+
+<p align="center">
+  <img src="docs/images/agent_state_contract.svg" alt="AI-BI LangGraph Runtime State Contract" width="100%" />
+</p>
 
 ```python
 class AgentState(TypedDict):
