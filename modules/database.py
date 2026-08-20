@@ -1,81 +1,103 @@
-"""
-Database Module
-Low-level SQLite read helpers for static data tables
-(financial parameters, weather, member totals).
-"""
 import os
-import sqlite3
+import logging
 import pandas as pd
+import sqlite3
+from datetime import timedelta
 
-from modules.config import config
+logger = logging.getLogger(__name__)
 
-# ── Static file loaders (CSV / Excel) ────────────────────────────────────────
+def get_db_files():
+    """Get all available database files in the database directory."""
+    db_dir = './database'
+    if not os.path.exists(db_dir):
+        logger.error("数据库目录不存在")
+        return []
+    return sorted([os.path.join(db_dir, f) for f in os.listdir(db_dir) if f.endswith('.db')])
 
-def load_financial_data() -> pd.DataFrame:
-    """
-    Load financial parameters (fixed costs, COGS ratio, op ratio).
-    Looks for financial_params.csv in the database directory.
-    Falls back to defaults if not found.
-    """
-    csv_path = os.path.join(config.DATA_DIR, "financial_params.csv")
-    if os.path.exists(csv_path):
-        try:
-            return pd.read_csv(csv_path)
-        except Exception as exc:
-            print(f"[database] Could not load financial_params.csv: {exc}")
-
-    # Return sensible defaults so the app still runs without the file
-    return pd.DataFrame([{
-        "fixed_cost":    1500.0,
-        "cogs_ratio":    0.35,
-        "op_cost_ratio": 0.12,
-    }])
-
-
-def load_weather_data() -> pd.DataFrame:
-    """
-    Load weather records from weather.xlsx if present.
-    Expected columns: date, condition
-    """
-    xlsx_path = os.path.join(config.DATA_DIR, "weather.xlsx")
-    if os.path.exists(xlsx_path):
-        try:
-            df = pd.read_excel(xlsx_path, parse_dates=["date"])
-            return df[["date", "condition"]].copy()
-        except Exception as exc:
-            print(f"[database] Could not load weather.xlsx: {exc}")
-
-    return pd.DataFrame(columns=["date", "condition"])
-
-
-def load_member_totals() -> dict:
-    """
-    Load all-time membership totals from member_summary.csv if present.
-    Expected columns: member_count, total_balance, principal, gift_balance
-    """
-    csv_path = os.path.join(config.DATA_DIR, "member_summary.csv")
-    if os.path.exists(csv_path):
-        try:
-            df = pd.read_csv(csv_path)
-            row = df.iloc[-1]
-            return {
-                "member_count":  int(row.get("member_count",  0)),
-                "total_balance": float(row.get("total_balance", 0)),
-                "principal":     float(row.get("principal",    0)),
-                "gift_balance":  float(row.get("gift_balance", 0)),
-            }
-        except Exception as exc:
-            print(f"[database] Could not load member_summary.csv: {exc}")
-
-    return {"member_count": 0, "total_balance": 0.0, "principal": 0.0, "gift_balance": 0.0}
-
-
-# ── Generic utility ───────────────────────────────────────────────────────────
-
-def load_with_error_handling(loader_fn, label: str) -> pd.DataFrame:
-    """Wrap any loader function with uniform error handling."""
+def get_db_connection(db_file):
+    """Create and return a database connection with error handling."""
     try:
-        return loader_fn()
-    except Exception as exc:
-        print(f"[database] Failed to load {label}: {exc}")
+        conn = sqlite3.connect(db_file)
+        return conn
+    except sqlite3.Error as e:
+        logger.error(f"Database connection error for {db_file}: {e}")
+        raise
+
+def load_data_from_multiple_dbs(query, parse_dates=None):
+    """Load and combine data from multiple database files."""
+    dfs = []
+    db_files = get_db_files()
+    
+    if not db_files:
+        logger.error("未找到数据库文件")
         return pd.DataFrame()
+    
+    for db_file in db_files:
+        try:
+            with get_db_connection(db_file) as conn:
+                df = pd.read_sql_query(query, conn, parse_dates=parse_dates)
+                dfs.append(df)
+        except Exception as e:
+            logger.warning(f"Error loading data from {db_file}: {e}")
+            continue
+    
+    return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+
+def load_sales_data():
+    """Load sales data from all database files."""
+    return load_data_from_multiple_dbs("SELECT * FROM sales", parse_dates=["销售时间"])
+
+def load_loss_data():
+    """Load loss data from all database files and process it."""
+    df = load_data_from_multiple_dbs("SELECT * FROM loss", parse_dates=["审核时间"])
+    if not df.empty:
+        df = df.rename(columns={"数量": "报废数量"})
+        df["调整日期"] = (df["审核时间"].apply(lambda x: (x - timedelta(hours=5)).date()).ffill())
+    return df
+
+def load_card_data():
+    """Load card data from all database files."""
+    return load_data_from_multiple_dbs("SELECT * FROM cards", parse_dates=["日期"])
+
+def load_financial_data():
+    """Load financial data from all database files."""
+    return load_data_from_multiple_dbs("SELECT * FROM financial")
+
+def load_weather_data():
+    """Load weather data from all database files."""
+    return load_data_from_multiple_dbs("SELECT * FROM weather", parse_dates=["日期"])
+
+def load_with_error_handling(load_func, table_name):
+    """Load data with error handling."""
+    try:
+        return load_func()
+    except Exception as e:
+        logger.error(f"Error loading {table_name} data: {e}")
+        return pd.DataFrame()
+
+def load_member_card_data():
+    """Load member card data from all database files and parse it."""
+    db_files = get_db_files()
+    member_data = {
+        "member_count": 0,
+        "total_amount": 0,
+        "principal_amount": 0,
+        "gift_amount": 0,
+    }
+    for db_file in db_files:
+        try:
+            with get_db_connection(db_file) as conn:
+                df = pd.read_sql_query("SELECT * FROM member_card LIMIT 1", conn)
+                if not df.empty:
+                    member_count = int(df["0"].iloc[0].split("：")[1])
+                    total_amount = float(df["1"].iloc[0].split("：")[1].split("（")[0])
+                    principal_amount = float(df["1"].iloc[0].split("：")[2].split(" ")[0])
+                    gift_amount = total_amount - principal_amount
+                    member_data["member_count"] += member_count
+                    member_data["total_amount"] += total_amount
+                    member_data["principal_amount"] += principal_amount
+                    member_data["gift_amount"] += gift_amount
+        except Exception as e:
+            logger.warning(f"Error loading member card data from {db_file}: {e}")
+            continue
+    return member_data

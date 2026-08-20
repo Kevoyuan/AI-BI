@@ -1,4 +1,5 @@
+# modules package
 """
-modules/__init__.py
-Makes modules/ a Python package.
+经营分析报表模块包
+包含数据加载、可视化、业务逻辑和UI组件等模块
 """

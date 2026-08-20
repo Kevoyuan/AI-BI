@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>经营 API Dashboard — AI-BI 智能商业分析</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,500&family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/ai.css" />
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+
+    <aside class="rail">
+      <div class="brand">
+        <span class="mark" aria-hidden="true">✦</span>
+        <div>
+          <p class="kicker">Boulangerie&nbsp;·&nbsp;Ledger</p>
+          <h1>经营<br />API&nbsp;仪表盘</h1>
+        </div>
+      </div>
+
+      <p class="rail-note">
+        数据直连银豹后台接口 · 不写入本地数据库
+      </p>
+
+      <div class="preset-bar" id="preset-bar" role="tablist" aria-label="时间范围">
+        <button class="preset" data-preset="today" role="tab">今日</button>
+        <button class="preset" data-preset="yesterday" role="tab">昨日</button>
+        <button class="preset" data-preset="week" role="tab">本周</button>
+        <button class="preset active" data-preset="month" role="tab">本月</button>
+      </div>
+
+      <form id="filters" class="filters" autocomplete="off">
+        <label>
+          <span>年份</span>
+          <select id="year"></select>
+        </label>
+        <label>
+          <span>月份</span>
+          <select id="month"></select>
+        </label>
+        <div class="date-range-fields">
+          <label>
+            <span>开始日期</span>
+            <input id="date-from" type="date" />
+          </label>
+          <label>
+            <span>结束日期</span>
+            <input id="date-to" type="date" />
+          </label>
+        </div>
+        <button type="submit">
+          <span>刷新接口数据</span>
+          <i class="arrow" aria-hidden="true">→</i>
+        </button>
+      </form>
+
+      <div class="status-card" id="status-card">
+        <span class="status-dot" aria-hidden="true"></span>
+        <div>
+          <strong id="status-title">等待加载</strong>
+          <p id="status-copy">从银豹后台接口读取数据。</p>
+        </div>
+      </div>
+
+      <div class="rail-foot">
+        <span class="dot-live" id="dot-live" aria-hidden="true"></span>
+        <span id="live-time">—</span>
+      </div>
+    </aside>
+
+    <main class="stage">
+      <header class="masthead">
+        <div class="masthead-left">
+          <p class="eyebrow" id="range-label">—</p>
+          <h2 class="display">
+            门店经营<span class="italic">快照</span>
+          </h2>
+          <p class="masthead-sub">
+            银豹 POS 实收、报损与储值卡月度回看 ·
+            净利润根据财务参数动态估算
+          </p>
+        </div>
+        <div class="masthead-right">
+          <div class="updated">
+            <p>数据更新于</p>
+            <strong id="updated-at">—</strong>
+          </div>
+          <button id="refresh-data" class="ghost" type="button" title="按免费额度保护策略刷新；当前月最多每 6 小时重新拉取一次">
+            <span class="refresh-glyph" aria-hidden="true">↻</span>
+            <span>刷新数据</span>
+          </button>
+          <button id="open-ai" class="ghost ai-trigger" type="button" title="唤起 AI 经营助手">
+            <span class="ai-glyph" aria-hidden="true">✦</span>
+            <span>AI 助手</span>
+          </button>
+          <button id="download-json" class="ghost" type="button">
+            下载 JSON ↓
+          </button>
+        </div>
+      </header>
+
+      <section id="error" class="error hidden" role="alert"></section>
+
+      <section id="loading" class="loading-grid">
+        <div></div><div></div><div></div>
+        <div></div><div></div><div></div>
+      </section>
+
+      <section id="content" class="hidden">
+        <!-- ALERTS BANNER -->
+        <section id="alerts-banner" class="alerts-banner hidden">
+          <div class="alerts-head">
+            <span class="alerts-pulse" aria-hidden="true"></span>
+            <strong>业务提醒</strong>
+            <span id="alerts-count" class="alerts-count">0</span>
+          </div>
+          <ul id="alerts-list" class="alerts-list"></ul>
+        </section>
+
+        <!-- EXECUTIVE SUMMARY BANNER -->
+        <section id="exec-summary" class="exec-summary-banner"></section>
+
+        <!-- KPI BAND -->
+        <section class="kpi-band" id="kpis"></section>
+
+        <!-- CUMULATIVE KPI BAND -->
+        <section class="cum-band" id="cumulative"></section>
+
+        <!-- TAB NAV -->
+        <nav class="tabs" role="tablist" aria-label="仪表盘视图">
+          <button class="tab tab-ai" data-tab="ai" role="tab" aria-selected="false">
+            <span class="ai-tab-glyph" aria-hidden="true">✦</span>
+            <span>AI 经营助手</span>
+          </button>
+          <button class="tab active" data-tab="overview" role="tab" aria-selected="true">经营概览</button>
+          <button class="tab" data-tab="income" role="tab" aria-selected="false">收入分类</button>
+          <button class="tab" data-tab="product" role="tab" aria-selected="false">商品分析</button>
+          <button class="tab" data-tab="loss" role="tab" aria-selected="false">报损与储值</button>
+          <button class="tab" data-tab="insight" role="tab" aria-selected="false">业务洞察</button>
+          <button class="tab" data-tab="weather-sales" role="tab" aria-selected="false">天气 × 实收</button>
+          <button class="tab" data-tab="weather" role="tab" aria-selected="false">天气记录</button>
+          <button class="tab" data-tab="raw" role="tab" aria-selected="false">明细</button>
+        </nav>
+
+        <!-- TAB: AI 经营助手 (独立工作台) -->
+        <section class="tab-panel tab-panel-ai" data-panel="ai">
+          <article class="panel span-12 ai-workbench-panel">
+            <div class="ai-workbench-header">
+              <div class="ai-wb-title-group">
+                <div class="ai-wb-badge">
+                  <span class="ai-spark" aria-hidden="true">✦</span>
+                  <strong>AI 智能经营顾问</strong>
+                </div>
+                <p id="ai-page-scope" class="ai-wb-scope">基于当前看板经营数据实时分析</p>
+              </div>
+              <div class="ai-wb-actions">
+                <button id="ai-clear-btn" class="ai-action-btn" type="button" title="清空当前对话">
+                  <span>清空对话</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 对话流展示容器 -->
+            <div id="ai-page-messages" class="ai-page-messages" aria-live="polite">
+              <!-- 初始欢迎卡与推荐问题矩阵 -->
+              <div id="ai-welcome-card" class="ai-welcome-card">
+                <div class="ai-welcome-hero">
+                  <span class="ai-hero-icon">✦</span>
+                  <h4>您好，我是您的专属烘焙经营助手</h4>
+                  <p>已接入银豹后台实时接口与天气对齐模型，可随时为您诊断异常、推演备货并制定增收策略。</p>
+                </div>
+                <div class="ai-prompt-matrix">
+                  <div class="ai-matrix-col">
+                    <div class="ai-matrix-category">📈 营收提升与提单</div>
+                    <button type="button" class="ai-prompt-btn">给我 3 条本周提升营收的具体建议</button>
+                    <button type="button" class="ai-prompt-btn">分析周末与工作日的客单价与销量差异</button>
+                  </div>
+                  <div class="ai-matrix-col">
+                    <div class="ai-matrix-category">🛡️ 控损与滞销诊断</div>
+                    <button type="button" class="ai-prompt-btn">分析这 3 个月的滞销品与报损原因</button>
+                    <button type="button" class="ai-prompt-btn">现烤类报损率异常诊断与减损策略</button>
+                  </div>
+                  <div class="ai-matrix-col">
+                    <div class="ai-matrix-category">🥐 选品与毛利结构</div>
+                    <button type="button" class="ai-prompt-btn">各品类毛利与销量综合分析，推荐打造的爆款组合</button>
+                    <button type="button" class="ai-prompt-btn">基于 ABC 分类法给出滞销品调优方案</button>
+                  </div>
+                  <div class="ai-matrix-col">
+                    <div class="ai-matrix-category">🌦️ 天气与智能备货</div>
+                    <button type="button" class="ai-prompt-btn">明天预计销售多少？给出具体备货量建议</button>
+                    <button type="button" class="ai-prompt-btn">近期天气对各品类销售的量化影响分析</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 底部吸底输入条 -->
+            <div class="ai-page-input-container">
+              <div id="ai-page-suggestions" class="ai-suggestions">
+                <button type="button" class="ai-chip">这周报损率是不是偏高？</button>
+                <button type="button" class="ai-chip">周二销量为什么低？</button>
+                <button type="button" class="ai-chip">给我 3 条本周提升营收的建议</button>
+                <button type="button" class="ai-chip">这3个月的滞销品分析一下</button>
+                <button type="button" class="ai-chip">明天预计备多少货？</button>
+              </div>
+
+              <form id="ai-page-form" class="ai-page-form" autocomplete="off">
+                <textarea id="ai-page-input" rows="1" placeholder="输入您的经营问题，如：分析这3个月的滞销品（按 Enter 发送，Shift+Enter 换行）…" spellcheck="false"></textarea>
+                <button id="ai-page-send" type="submit" aria-label="发送">
+                  <span class="ai-send-glyph" aria-hidden="true">➤</span>
+                </button>
+              </form>
+            </div>
+          </article>
+        </section>
+
+        <!-- TAB: 经营概览 -->
+        <section class="tab-panel active" data-panel="overview">
+          <article class="panel span-12" id="sec-pospal-overview" data-jump="overview" data-title="银豹整体概况">
+            <div class="panel-head">
+              <p class="panel-eyebrow">PosPal overview</p>
+              <h3>银豹整体概况</h3>
+              <p class="panel-sub">从接口聚合营业、网店、营销日历与短信余额状态。</p>
+            </div>
+            <div id="pospal-overview" class="pospal-overview"></div>
+          </article>
+
+          <article class="panel span-12" data-jump="overview" data-title="每日走势">
+            <div class="panel-head">
+              <p class="panel-eyebrow">Daily pulse</p>
+              <h3>每日走势</h3>
+              <p class="panel-sub">实收金额、净利润估算、报损与储值卡充值随日期变化。</p>
+            </div>
+            <div class="legend" id="legend-daily"></div>
+            <div id="daily-chart" class="chart chart-tall"></div>
+          </article>
+
+          <div class="grid grid-two">
+            <article class="panel" id="sec-open-close" data-jump="overview" data-title="营业时段与日内节奏">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Open / close</p>
+                <h3>营业时段与日内节奏</h3>
+                <p class="panel-sub">开张 / 高峰 / 打烊时间点，以及爬坡与收尾耗时。</p>
+              </div>
+              <div id="open-close" class="open-close"></div>
+            </article>
+            <article class="panel" id="sec-calendar" data-jump="overview" data-title="月度日历">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Calendar</p>
+                <h3>月度日历</h3>
+                <p class="panel-sub">日营业额热力 + 每日净利润/报损状态。</p>
+              </div>
+              <div id="calendar-grid" class="calendar-grid"></div>
+            </article>
+          </div>
+
+          <div class="grid grid-two">
+            <article class="panel" id="sec-discounts" data-jump="overview" data-title="优惠与折让">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Discounts</p>
+                <h3>优惠与折让</h3>
+                <p class="panel-sub">销售金额 vs 实收金额，优惠率与每日趋势。</p>
+              </div>
+              <div id="discounts" class="discounts"></div>
+            </article>
+            <article class="panel" id="sec-payment" data-jump="overview" data-title="支付方式">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Payment ledger</p>
+                <h3>收款结构</h3>
+                <p class="panel-sub">支付方式、混合支付与营业实收核对。</p>
+              </div>
+              <div id="payment-mix" class="payment-mix"></div>
+              <div id="ticket-type" class="ticket-type"></div>
+            </article>
+          </div>
+
+          <div class="grid grid-two">
+            <article class="panel" id="sec-member" data-jump="overview" data-title="会员与储值">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Members</p>
+                <h3>会员与储值</h3>
+                <p class="panel-sub">会员数 · 卡内剩余 · 充值 / 赠送 · 本金 / 赠送消费比。</p>
+              </div>
+              <div id="member-summary" class="member-summary"></div>
+            </article>
+            <article class="panel" id="sec-hour" data-jump="overview" data-title="小时销售热度">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Hourly</p>
+                <h3>小时销售热度</h3>
+                <p class="panel-sub">按小时汇总实收与订单数。</p>
+              </div>
+              <div id="hour-chart" class="hour-chart"></div>
+            </article>
+          </div>
+
+          <article class="panel span-12" id="sec-dayparting-guide" data-jump="overview" data-title="时段排产与陈列策略">
+            <div class="panel-head">
+              <p class="panel-eyebrow">Dayparting strategy</p>
+              <h3>时段排产与陈列策略</h3>
+              <p class="panel-sub">基于小时客流与分类销售热力，自动生成的出炉批次与时段运营建议。</p>
+            </div>
+            <div id="dayparting-cards" class="dayparting-cards"></div>
+          </article>
+
+          <article class="panel span-12" id="sec-daily" data-jump="overview" data-title="每日汇总">
+            <div class="panel-head">
+              <p class="panel-eyebrow">Day by day</p>
+              <h3>每日汇总</h3>
+              <p class="panel-sub">含成本估算、净利润、报损率与客单价。</p>
+            </div>
+            <div class="table-wrap small">
+              <table id="daily-table"></table>
+            </div>
+          </article>
+        </section>
+
+        <!-- TAB: 收入分类 -->
+        <section class="tab-panel" data-panel="income">
+          <div class="grid grid-two">
+            <article class="panel" id="p-0-收入分类" data-jump="income" data-title="收入分类">
+              <div class="panel-head">
+                <p class="panel-eyebrow">By category</p>
+                <h3>收入分类</h3>
+                <p class="panel-sub">按商品和分类自动归并。</p>
+              </div>
+              <div id="income-bars" class="bar-list"></div>
+            </article>
+            <article class="panel" id="p-1-来源" data-jump="income" data-title="来源">
+              <div class="panel-head">
+                <p class="panel-eyebrow">By channel</p>
+                <h3>来源</h3>
+                <p class="panel-sub">当前导出可识别的渠道。</p>
+              </div>
+              <div class="donut-wrap">
+                <div id="source-donut" class="donut"></div>
+                <ul id="source-legend" class="donut-legend"></ul>
+              </div>
+            </article>
+          </div>
+
+          <article class="panel" id="p-2-收入分类明细" data-jump="income" data-title="收入分类明细">
+            <div class="panel-head">
+              <p class="panel-eyebrow">Detail</p>
+              <h3>收入分类明细</h3>
+            </div>
+            <div class="table-wrap">
+              <table id="income-table"></table>
+            </div>
+          </article>
+        </section>
+
+        <!-- TAB: 商品分析 -->
+        <section class="tab-panel" data-panel="product">
+          <article class="panel span-12 product-top-panel" id="p-3-商品销售-top-30" data-jump="product" data-title="商品销售 Top 30（含明细）">
+            <div class="panel-head">
+              <p class="panel-eyebrow">Top performers</p>
+              <h3>商品销售 Top 30</h3>
+              <p class="panel-sub">按实收金额排序，左侧看排名，右侧查看同一批商品的销售明细。</p>
+            </div>
+            <div class="product-top-grid">
+              <section class="product-top-section" aria-labelledby="product-ranking-title">
+                <div class="product-section-head">
+                  <span class="product-section-kicker">Ranking</span>
+                  <h4 id="product-ranking-title">销售排名</h4>
+                </div>
+                <div id="product-bars" class="product-bars"></div>
+              </section>
+              <section class="product-top-section product-detail-section" aria-labelledby="product-detail-title">
+                <div class="product-section-head">
+                  <span class="product-section-kicker">Detail</span>
+                  <h4 id="product-detail-title">销售明细</h4>
+                </div>
+                <div class="table-wrap product-detail-table">
+                  <table id="product-table"></table>
+                </div>
+              </section>
+            </div>
+          </article>
+
+          <article class="panel span-12" id="p-5-商品利润-top-10-bottom-5" data-jump="product" data-title="商品利润 Top 10 / Bottom 5">
+            <div class="panel-head">
+              <p class="panel-eyebrow">Profit ranking</p>
+              <h3>商品利润 Top 10 / Bottom 5</h3>
+              <p class="panel-sub">基于销售单据利润字段，识别赚钱王与亏损品。</p>
+            </div>
+            <div id="profit-ranking" class="profit-ranking"></div>
+          </article>
+
+          <article class="panel span-12" id="sec-product-bcg" data-jump="product" data-title="商品选品与毛利四象限（BCG Matrix）">
+            <div class="panel-head">
+              <p class="panel-eyebrow">BCG Matrix</p>
+              <h3>商品选品与毛利四象限</h3>
+              <p class="panel-sub">横轴=销售件数，纵轴=单品利润率，气泡大小=销售额。右上明星款保供，左下滞销款淘汰。</p>
+            </div>
+            <div class="bcg-legend">
+              <span class="bcg-pill pill-star"><i class="bcg-dot dot-star"></i> 🌟 明星爆款 (高销·高利)</span>
+              <span class="bcg-pill pill-potential"><i class="bcg-dot dot-potential"></i> 💡 暴利潜力 (低销·高利)</span>
+              <span class="bcg-pill pill-traffic"><i class="bcg-dot dot-traffic"></i> 🧲 流量引流 (高销·低利)</span>
+              <span class="bcg-pill pill-slow"><i class="bcg-dot dot-slow"></i> ⚠️ 滞销淘汰 (低销·低利)</span>
+            </div>
+            <div id="product-bcg-chart" class="chart chart-tall"></div>
+          </article>
+        </section>
+
+        <!-- TAB: 报损与储值 -->
+        <section class="tab-panel" data-panel="loss">
+          <div class="grid grid-two">
+            <article class="panel" id="p-6-报损" data-jump="loss" data-title="报损">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Loss</p>
+                <h3>报损</h3>
+                <p class="panel-sub">按报损原因汇总。</p>
+              </div>
+              <div id="loss-list" class="bar-list"></div>
+            </article>
+            <article class="panel" id="p-7-储值卡" data-jump="loss" data-title="储值卡">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Stored value</p>
+                <h3>储值卡</h3>
+                <p class="panel-sub">每日充值与消费走势。</p>
+              </div>
+              <div class="legend" id="legend-card"></div>
+              <div id="card-chart" class="chart"></div>
+            </article>
+          </div>
+
+          <article class="panel" id="p-8-充值明细" data-jump="loss" data-title="充值明细">
+            <div class="panel-head">
+              <p class="panel-eyebrow">Recharge</p>
+              <h3>充值明细</h3>
+            </div>
+            <div class="table-wrap">
+              <table id="recharge-table"></table>
+            </div>
+          </article>
+
+          <article class="panel" id="p-9-报损原因明细" data-jump="loss" data-title="报损原因明细">
+            <div class="panel-head">
+              <p class="panel-eyebrow">Loss detail</p>
+              <h3>报损原因明细</h3>
+              <p class="panel-sub">每条报损原因对应金额与数量。</p>
+            </div>
+            <div class="table-wrap">
+              <table id="loss-reason-table"></table>
+            </div>
+          </article>
+        </section>
+
+        <!-- TAB: 业务洞察 -->
+        <section class="tab-panel" data-panel="insight">
+          <!-- Anchor navigator -->
+          <nav class="anchor-nav" id="anchor-nav">
+            <button class="anchor-chip" data-target="sec-cumulative">累计走势</button>
+            <button class="anchor-chip" data-target="sec-heatmap">订单热力</button>
+            <button class="anchor-chip" data-target="sec-period">时段分析</button>
+            <button class="anchor-chip" data-target="sec-hv">高价值</button>
+            <button class="anchor-chip" data-target="sec-loss-cat">报废分类</button>
+            <button class="anchor-chip" data-target="sec-abc">ABC分类</button>
+            <button class="anchor-chip" data-target="sec-vol">波动性</button>
+            <button class="anchor-chip" data-target="sec-lorenz">集中度</button>
+            <button class="anchor-chip" data-target="sec-cat-hour">分类时段</button>
+            <button class="anchor-chip" data-target="sec-oad">订单分布</button>
+          </nav>
+
+          <article class="panel span-12" id="sec-cumulative" data-jump="insight" data-title="累计净利润走势">
+            <div class="panel-head">
+              <p class="panel-eyebrow">Cumulative</p>
+              <h3>累计净利润走势</h3>
+              <p class="panel-sub">从月首到月尾累计净利润累计金额 + 累计净利润率变化。</p>
+            </div>
+            <div id="cum-chart" class="chart chart-tall"></div>
+          </article>
+
+          <div class="grid grid-two">
+            <article class="panel" id="p-10-日期-时段-订单热力图" data-jump="insight" data-title="日期 × 时段 订单热力图">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Order heatmap</p>
+                <h3>日期 × 时段 订单热力图</h3>
+                <p class="panel-sub">行=日期，列=有订单的小时，颜色 = 订单数。空白时段自动隐藏。</p>
+              </div>
+              <div id="order-heatmap" class="order-heatmap"></div>
+            </article>
+            <article class="panel" id="p-11-时段订单分布" data-jump="insight" data-title="时段订单分布">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Period</p>
+                <h3>时段订单分布</h3>
+                <p class="panel-sub">早 / 午 / 下午 / 晚四段时间的订单与占比。</p>
+              </div>
+              <div id="hour-period" class="hour-period"></div>
+            </article>
+          </div>
+
+          <div class="grid grid-two">
+            <article class="panel" id="p-12-高价值订单-50" data-jump="insight" data-title="高价值订单（>¥50）">
+              <div class="panel-head">
+                <p class="panel-eyebrow">High value</p>
+                <h3>高价值订单（>¥50）</h3>
+                <p class="panel-sub">高客单订单数、占比、金额区间分布。</p>
+              </div>
+              <div id="high-value" class="high-value"></div>
+            </article>
+            <article class="panel" id="p-13-小时客单价" data-jump="insight" data-title="小时客单价">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Ticket by hour</p>
+                <h3>小时客单价</h3>
+                <p class="panel-sub">不同时段的客单价水平。晚市通常客单更高。</p>
+              </div>
+              <div id="ticket-chart" class="chart"></div>
+            </article>
+          </div>
+
+          <div class="grid grid-two">
+            <article class="panel" id="p-14-报废按商品分类" data-jump="insight" data-title="报废按商品分类">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Waste by category</p>
+                <h3>报废按商品分类</h3>
+                <p class="panel-sub">各商品分类产生的报废金额与数量。</p>
+              </div>
+              <div id="loss-by-category" class="bar-list"></div>
+            </article>
+            <article class="panel" id="p-15-储值卡汇总" data-jump="insight" data-title="储值卡汇总">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Card summary</p>
+                <h3>储值卡汇总</h3>
+                <p class="panel-sub">本月充值、消费、本金与赠送拆分。</p>
+              </div>
+              <div id="card-summary" class="card-summary"></div>
+            </article>
+          </div>
+
+          <div class="grid grid-two">
+            <article class="panel" id="p-16-销售热力图" data-jump="insight" data-title="销售热力图">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Heatmap</p>
+                <h3>销售热力图</h3>
+                <p class="panel-sub">按周（行）×周几（列）看每天实收金额，颜色越深越强。</p>
+              </div>
+              <div id="heatmap" class="heatmap"></div>
+            </article>
+            <article class="panel" id="p-17-工作日-vs-周末" data-jump="insight" data-title="工作日 vs 周末">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Weekday pattern</p>
+                <h3>工作日 vs 周末</h3>
+                <p class="panel-sub">两组日均实收与订单对比。</p>
+              </div>
+              <div id="weekday-bars" class="weekday-bars"></div>
+            </article>
+          </div>
+
+          <div class="grid grid-two">
+            <article class="panel" id="p-18-分类毛利率" data-jump="insight" data-title="分类毛利率">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Category margin</p>
+                <h3>分类毛利率</h3>
+                <p class="panel-sub">实收金额、毛利与毛利率（毛利 = 实收 − 商品总价）。</p>
+              </div>
+              <div id="category-margin" class="bar-list"></div>
+            </article>
+            <article class="panel" id="p-19-运营效率" data-jump="insight" data-title="运营效率">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Efficiency</p>
+                <h3>运营效率</h3>
+                <p class="panel-sub">本月成本结构、盈利日数与利润率。</p>
+              </div>
+              <div id="efficiency" class="efficiency"></div>
+            </article>
+          </div>
+
+          <div class="grid grid-two">
+            <article class="panel" id="p-20-报损异常日报" data-jump="insight" data-title="报损异常日报">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Loss anomaly</p>
+                <h3>报损异常日报</h3>
+                <p class="panel-sub">报损率超过 1.5σ 或 ≥ 5% 的日子。颜色越深越严重。</p>
+              </div>
+              <div id="loss-anomaly" class="loss-anomaly"></div>
+            </article>
+            <article class="panel" id="p-21-储值卡余额走势" data-jump="insight" data-title="储值卡余额走势">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Card balance</p>
+                <h3>储值卡余额走势</h3>
+                <p class="panel-sub">每日净值（充值 − 消费）与累计余额。</p>
+              </div>
+              <div class="legend" id="legend-card-net">
+                <span><i style="background:#5b8c7b"></i>每日净值</span>
+                <span><i style="background:#c89b3c"></i>累计余额</span>
+              </div>
+              <div id="card-net-chart" class="chart"></div>
+            </article>
+          </div>
+
+          <div class="grid grid-two">
+            <article class="panel" id="p-22-商品-abc-分类" data-jump="insight" data-title="商品 ABC 分类">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Pareto</p>
+                <h3>商品 ABC 分类</h3>
+                <p class="panel-sub">A 类（前 80% 收入）·B 类（80%–95%）·C 类（其余）。</p>
+              </div>
+              <div class="abc-summary" id="abc-summary"></div>
+              <div class="table-wrap small">
+                <table id="abc-table"></table>
+              </div>
+            </article>
+            <article class="panel" id="p-23-滞销商品-top-10" data-jump="insight" data-title="滞销商品 Top 10">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Slow movers</p>
+                <h3>滞销商品 Top 10</h3>
+                <p class="panel-sub">可考虑促销或下架。</p>
+              </div>
+              <div class="table-wrap">
+                <table id="slow-table"></table>
+              </div>
+            </article>
+          </div>
+
+          <div class="grid grid-two">
+            <article class="panel" id="p-24-日销售波动性" data-jump="insight" data-title="日销售波动性">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Volatility</p>
+                <h3>日销售波动性</h3>
+                <p class="panel-sub">均值、中位数、标准差、变异系数、百分位数与最值日期。</p>
+              </div>
+              <div id="volatility" class="volatility"></div>
+            </article>
+            <article class="panel" id="p-25-品类集中度-lorenz-曲线" data-jump="insight" data-title="品类集中度（Lorenz 曲线）">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Concentration</p>
+                <h3>品类集中度（Lorenz 曲线）</h3>
+                <p class="panel-sub">横轴 = 累计 SKU 占比，纵轴 = 累计收入占比。曲线越弯，集中度越高。</p>
+              </div>
+              <div class="lorenz-stats" id="lorenz-stats"></div>
+              <div id="lorenz-chart" class="chart"></div>
+            </article>
+          </div>
+
+          <div class="grid">
+            <article class="panel span-12" id="p-26-分类-时段-收入热力图" data-jump="insight" data-title="分类 × 时段 收入热力图">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Category × hour</p>
+                <h3>分类 × 时段 收入热力图</h3>
+                <p class="panel-sub">展示 10:00 之后各收入分类的时段实收，颜色越深代表收入越高。</p>
+              </div>
+              <div id="cat-hour-heat" class="cat-hour-heat"></div>
+            </article>
+            <article class="panel span-12" id="p-27-订单金额分布" data-jump="insight" data-title="订单金额分布">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Order amounts</p>
+                <h3>订单金额分布</h3>
+                <p class="panel-sub">订单按金额分桶的分布（直方图）。</p>
+              </div>
+              <div id="order-amount-dist" class="order-amount-dist"></div>
+            </article>
+          </div>
+        </section>
+
+        <!-- TAB: 天气 × 实收 -->
+        <section class="tab-panel" data-panel="weather-sales">
+          <div class="grid">
+            <!-- 核心洞察卡片 -->
+            <article class="panel span-12" id="sec-weather-sales-summary" data-jump="weather-sales" data-title="天气营收洞察">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Weather & Sales Impact</p>
+                <h3>天气 × 实收量化洞察</h3>
+                <p class="panel-sub">分析天气状况、降雨量与气温对门店实收金额、订单量及客单价的影响。</p>
+              </div>
+              <div id="weather-sales-summary" class="ws-summary-grid"></div>
+            </article>
+
+            <!-- 天气类型对比柱状图 -->
+            <article class="panel span-6" data-jump="weather-sales" data-title="天气类型营收对比">
+              <div class="panel-head">
+                <p class="panel-eyebrow">By Condition</p>
+                <h3>各天气日均实收与订单对比</h3>
+                <p class="panel-sub">统计不同天气类型下的日均营业额、日均订单量及相对晴天基准波动。</p>
+              </div>
+              <div id="weather-sales-condition-chart" class="chart-container" style="width:100%;height:320px;"></div>
+            </article>
+
+            <!-- 气象关联散点分布图 -->
+            <article class="panel span-6" data-jump="weather-sales" data-title="气象与营收散点">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Correlation</p>
+                <h3>气象条件与单日实收分布</h3>
+                <p class="panel-sub">最高气温与降水量对单日营业实收的散点聚类分布（气泡大小代表订单数）。</p>
+              </div>
+              <div id="weather-sales-scatter-chart" class="chart-container" style="width:100%;height:320px;"></div>
+            </article>
+
+            <!-- 逐日实收 x 降水量复合走势图 -->
+            <article class="panel span-12" data-jump="weather-sales" data-title="逐日天气营收走势">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Timeline Overlay</p>
+                <h3>每日天气走势 × 实收 × 降水量</h3>
+                <p class="panel-sub">将每日营业实收曲线（金）、当日降水量（水蓝柱）与气温（折线）复合叠加展示。</p>
+              </div>
+              <div id="weather-sales-timeline-chart" class="chart-container" style="width:100%;height:340px;"></div>
+            </article>
+
+            <!-- 逐日明细对照表 -->
+            <article class="panel span-12" data-jump="weather-sales" data-title="逐日对照明细">
+              <div class="panel-head">
+                <p class="panel-eyebrow">Daily Alignment</p>
+                <h3>逐日天气与营业实收对照表</h3>
+                <p class="panel-sub">每日天气、最高/最低温度、降水量与营业实收、订单笔数、客单价明细。</p>
+              </div>
+              <div class="table-wrap">
+                <table id="weather-sales-table"></table>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <!-- TAB: 天气记录 -->
+        <section class="tab-panel" data-panel="weather">
+          <article class="panel span-12" id="sec-weather-daily" data-jump="weather" data-title="门店天气记录">
+            <div class="panel-head">
+              <p class="panel-eyebrow">Weather archive</p>
+              <h3>门店天气记录</h3>
+              <p class="panel-sub">查看当天和所选日期范围内的历史天气，不关联营业收入。</p>
+            </div>
+            <div id="weather-daily" class="weather-daily"></div>
+          </article>
+        </section>
+
+        <!-- TAB: 明细 -->
+        <section class="tab-panel" data-panel="raw">
+          <article class="panel" id="p-28-接口原始数据" data-jump="raw" data-title="接口原始数据">
+            <div class="panel-head row">
+              <div>
+                <p class="panel-eyebrow">Raw</p>
+                <h3>接口原始数据</h3>
+                <p class="panel-sub">选择不同接口表查看明细，每张表最多 200-300 行。</p>
+              </div>
+              <div class="raw-tabs" id="raw-tabs" role="tablist">
+                <button class="raw-tab active" data-raw="sales" type="button">商品销售流水</button>
+                <button class="raw-tab" data-raw="loss" type="button">商品报损记录</button>
+                <button class="raw-tab" data-raw="cards" type="button">储值卡数据统计</button>
+                <button class="raw-tab" data-raw="cardsDetail" type="button">充值明细</button>
+                <button class="raw-tab" data-raw="salesDetail" type="button">销售流水单据</button>
+              </div>
+            </div>
+            <div class="table-wrap table-wide">
+              <table id="raw-table"></table>
+            </div>
+          </article>
+        </section>
+
+        <footer class="foot">
+          <span>AI-BI 智能商业分析 · API Dashboard</span>
+          <span id="foot-stamp">—</span>
+        </footer>
+      </section>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+
+    <!-- CMD+K SEARCH OVERLAY -->
+    <div id="search-overlay" class="search-overlay hidden" role="dialog" aria-modal="true" aria-label="快速搜索">
+      <div class="search-backdrop" id="search-backdrop"></div>
+      <div class="search-modal">
+        <div class="search-input-wrap">
+          <span class="search-icon">⌕</span>
+          <input type="text" id="search-input" placeholder="搜商品 / 收入分类 / 面板 / Tab…" autocomplete="off" spellcheck="false" />
+          <kbd class="search-esc">esc</kbd>
+        </div>
+        <ul id="search-results" class="search-results"></ul>
+        <div class="search-foot">
+          <span><kbd>↑</kbd><kbd>↓</kbd> 切换</span>
+          <span><kbd>↵</kbd> 跳转</span>
+          <span><kbd>esc</kbd> 关闭</span>
+        </div>
+      </div>
+    </div>
+    <!-- AI ASSISTANT DRAWER -->
+    <aside id="ai-drawer" class="ai-drawer" aria-hidden="true" aria-label="AI 经营助手">
+      <div class="ai-drag-handle" aria-hidden="true"></div>
+      <header class="ai-head">
+        <div class="ai-head-left">
+          <span class="ai-spark" aria-hidden="true">✦</span>
+          <div>
+            <strong>AI 经营助手</strong>
+            <p id="ai-scope">基于当前看板数据回答</p>
+          </div>
+        </div>
+        <button id="ai-close" class="ai-close" type="button" aria-label="关闭">✕</button>
+      </header>
+
+      <div id="ai-messages" class="ai-messages" aria-live="polite"></div>
+
+      <div id="ai-suggestions" class="ai-suggestions">
+        <button type="button" class="ai-chip">这周报损率是不是偏高？</button>
+        <button type="button" class="ai-chip">周二销量为什么低？</button>
+        <button type="button" class="ai-chip">给我 3 条本周提升营收的建议</button>
+        <button type="button" class="ai-chip">热销和滞销分别有哪些？</button>
+      </div>
+
+      <form id="ai-form" class="ai-form" autocomplete="off">
+        <textarea id="ai-input" rows="1" placeholder="问点什么，比如：这周为什么净利润下降？" spellcheck="false"></textarea>
+        <button id="ai-send" type="submit" aria-label="发送">
+          <span class="ai-send-glyph" aria-hidden="true">➤</span>
+        </button>
+      </form>
+    </aside>
+    <div id="ai-backdrop" class="ai-backdrop hidden" aria-hidden="true"></div>
+
+    <!-- AI ASSISTANT FLOATING BUTTON (FAB) -->
+    <button id="ai-fab" class="ai-fab" type="button" aria-label="打开 AI 经营助手" title="唤起 AI 经营助手">
+      <span class="ai-fab-glow" aria-hidden="true"></span>
+      <span class="ai-fab-spark" aria-hidden="true">✦</span>
+      <span class="ai-fab-text">AI 助手</span>
+    </button>
+
+    <script src="/vendor/echarts.min.js"></script>
+    <script src="/app.js" type="module"></script>
+    <script src="/ai_chart.js"></script>
+    <script src="/ai.js" type="module"></script>
+
+    <!-- CMD+K SEARCH OVERLAY -->
+    <div id="search-overlay" class="search-overlay hidden" role="dialog" aria-modal="true" aria-label="快速搜索">
+      <div class="search-backdrop" id="search-backdrop"></div>
+      <div class="search-modal">
+        <div class="search-input-wrap">
+          <span class="search-icon">⌕</span>
+          <input type="text" id="search-input" placeholder="搜商品 / 收入分类 / 面板 / Tab…" autocomplete="off" spellcheck="false" />
+          <kbd class="search-esc">esc</kbd>
+        </div>
+        <ul id="search-results" class="search-results"></ul>
+        <div class="search-foot">
+          <span><kbd>↑</kbd><kbd>↓</kbd> 切换</span>
+          <span><kbd>↵</kbd> 跳转</span>
+          <span><kbd>esc</kbd> 关闭</span>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

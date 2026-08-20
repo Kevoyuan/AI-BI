@@ -1,109 +1,127 @@
 """
-Profit Calculation — comprehensive P&L, category profitability, profit trend.
+利润计算 — 综合利润表、分类盈利分析、利润率趋势
 """
 import pandas as pd
 import numpy as np
+from modules.config import CATEGORY_COST_RATIOS
 
 
-# Default cost ratios per category (can be overridden via config)
-CATEGORY_COST_RATIOS = {
-    "fresh_baked": 0.35,
-    "pastry": 0.38,
-    "cookies": 0.30,
-    "beverages": 0.25,
-    "cake": 0.40,
-    "default": 0.35,
-}
-
-
-def comprehensive_pl(
-    sales_detail_df: pd.DataFrame,
-    sales_df: pd.DataFrame,
-    waste_df: pd.DataFrame,
-    financial_params: dict,
-) -> dict:
+def comprehensive_pl(sales_detail_df, sales_df, loss_df, financial_params):
     """
-    Build a comprehensive Profit & Loss statement.
+    综合利润表 (P&L)。
 
     Args:
-        sales_detail_df: Order-level revenue data.
-        sales_df:        Line-item sales with categories.
-        waste_df:        Waste / shrinkage records.
-        financial_params: dict with fixed_cost, material_ratio, opex_ratio.
+        sales_detail_df: 订单销售明细
+        sales_df: 商品销售明细（用于分类成本）
+        loss_df: 报损数据
+        financial_params: dict with 固定支出, 原料成本比, 运营管理
 
     Returns:
-        dict with revenue, cogs, gross_profit, gross_margin, opex,
-        fixed_cost, waste, operating_profit, operating_margin, net_profit, net_margin
+        dict with 营业收入, 原料成本, 毛利, 毛利率, 运营管理成本,
+        固定支出, 报废损耗, 运营利润, 运营利润率, 净利润, 净利率
     """
-    amount_col = "amount" if "amount" in sales_detail_df.columns else "revenue"
-    revenue = float(sales_detail_df[amount_col].sum())
-    material_ratio = financial_params.get("material_ratio", 0.40)
-    opex_ratio = financial_params.get("opex_ratio", 0.044)
-    fixed_cost = financial_params.get("fixed_cost", 1500)
+    revenue = sales_detail_df['实收金额'].sum()
+    material_ratio = financial_params.get("原料成本比", 0.40)
+    opex_ratio = financial_params.get("运营管理", 0.0438)
+    fixed_cost = financial_params.get("固定支出", 5000)
 
-    # Category-level COGS
+    # 按分类精确计算原料成本
     s = sales_df.copy()
-    s["cost_ratio"] = s.get("category", pd.Series(dtype=str)).map(CATEGORY_COST_RATIOS).fillna(CATEGORY_COST_RATIOS["default"])
-    price_col = "total_price" if "total_price" in s.columns else "amount"
-    s["cogs"] = s[price_col] * s["cost_ratio"]
-    material_cost = float(s["cogs"].sum())
+    s['成本率'] = s['商品分类'].map(CATEGORY_COST_RATIOS).fillna(CATEGORY_COST_RATIOS['default'])
+    s['商品成本'] = s['商品总价'] * s['成本率']
+    material_cost = s['商品成本'].sum()
 
+    # 毛利
     gross_profit = revenue - material_cost
     gross_margin = (gross_profit / revenue * 100) if revenue > 0 else 0
 
+    # 运营管理成本
     opex_cost = revenue * opex_ratio
+
+    # 运营利润
     operating_profit = gross_profit - opex_cost - fixed_cost
     operating_margin = (operating_profit / revenue * 100) if revenue > 0 else 0
 
-    # Waste (exclude samples)
-    w = waste_df.copy()
-    note_col = "note" if "note" in w.columns else w.columns[-1] if not w.empty else "note"
-    w[note_col] = w.get(note_col, pd.Series(dtype=str)).fillna("")
-    waste_amt_col = "waste_amount" if "waste_amount" in w.columns else "amount"
-    mask = ~w[note_col].str.contains("sample", case=False, na=False)
-    waste_cost = float(w.loc[mask, waste_amt_col].sum()) if not w.empty else 0
+    # 报废损耗（非试吃）
+    l = loss_df.copy()
+    l['备注'] = l['备注'].fillna('')
+    mask_waste = ~l['备注'].str.contains('试吃', na=False)
+    waste_cost = l.loc[mask_waste, '报损金额'].sum()
 
+    # 净利润
     net_profit = operating_profit - waste_cost
     net_margin = (net_profit / revenue * 100) if revenue > 0 else 0
 
     return {
-        "revenue": round(revenue, 0),
-        "cogs": round(material_cost, 0),
-        "gross_profit": round(gross_profit, 0),
-        "gross_margin_pct": round(gross_margin, 1),
-        "opex": round(opex_cost, 0),
-        "fixed_cost": round(fixed_cost, 0),
-        "waste_loss": round(waste_cost, 0),
-        "operating_profit": round(operating_profit, 0),
-        "operating_margin_pct": round(operating_margin, 1),
-        "net_profit": round(net_profit, 0),
-        "net_margin_pct": round(net_margin, 1),
+        "营业收入": round(revenue, 0),
+        "原料成本": round(material_cost, 0),
+        "毛利": round(gross_profit, 0),
+        "毛利率%": round(gross_margin, 1),
+        "运营管理成本": round(opex_cost, 0),
+        "固定支出": round(fixed_cost, 0),
+        "报废损耗": round(waste_cost, 0),
+        "运营利润": round(operating_profit, 0),
+        "运营利润率%": round(operating_margin, 1),
+        "净利润": round(net_profit, 0),
+        "净利率%": round(net_margin, 1),
     }
 
 
-def category_profit_analysis(sales_df: pd.DataFrame) -> pd.DataFrame:
+def category_profit_analysis(sales_df):
     """
-    Profitability breakdown by product category.
+    各分类盈利分析。
 
     Returns:
-        DataFrame with category, revenue, qty, products, cost_ratio,
-        cogs, gross_profit, gross_margin_pct, revenue_share_pct
+        DataFrame with 商品分类, 销售额, 销量, 商品数, 成本比例, 原料成本, 毛利, 毛利率%, 销售额占比%
     """
     df = sales_df.copy()
-    amount_col = "amount" if "amount" in df.columns else "revenue"
-    qty_col = "qty" if "qty" in df.columns else "quantity"
-    product_col = "product" if "product" in df.columns else "item"
 
-    cat = df.groupby("category").agg(
-        revenue=(amount_col, "sum"),
-        qty=(qty_col, "sum") if qty_col in df.columns else (amount_col, "count"),
-        products=(product_col, "nunique") if product_col in df.columns else (amount_col, "count"),
+    cat = df.groupby('商品分类').agg(
+        销售额=('实收金额', 'sum'),
+        销量=('销售数量', 'sum'),
+        商品数=('商品名称', 'nunique')
     ).reset_index()
 
-    cat["cost_ratio"] = cat["category"].map(CATEGORY_COST_RATIOS).fillna(CATEGORY_COST_RATIOS["default"])
-    cat["cogs"] = cat["revenue"] * cat["cost_ratio"]
-    cat["gross_profit"] = cat["revenue"] - cat["cogs"]
-    cat["gross_margin_pct"] = (cat["gross_profit"] / cat["revenue"] * 100).round(1)
-    cat["revenue_share_pct"] = (cat["revenue"] / cat["revenue"].sum() * 100).round(1)
+    cat['成本比例'] = cat['商品分类'].map(CATEGORY_COST_RATIOS).fillna(CATEGORY_COST_RATIOS['default'])
+    cat['原料成本'] = cat['销售额'] * cat['成本比例']
+    cat['毛利'] = cat['销售额'] - cat['原料成本']
+    cat['毛利率%'] = (cat['毛利'] / cat['销售额'] * 100).round(1)
+    cat['销售额占比%'] = (cat['销售额'] / cat['销售额'].sum() * 100).round(1)
 
-    return cat.sort_values("gross_profit", ascending=False)
+    return cat.sort_values('毛利', ascending=False)
+
+
+def profit_trend(sales_detail_df, sales_df, financial_params):
+    """
+    月度利润趋势。
+
+    Returns:
+        DataFrame with 月份, 营业收入, 原料成本, 毛利, 净利润, 净利率%
+    """
+    df_d = sales_detail_df.copy()
+    df_d['日期'] = pd.to_datetime(df_d['日期'])
+    df_d['月份'] = df_d['日期'].dt.to_period('M')
+
+    df_s = sales_df.copy()
+    df_s['销售时间'] = pd.to_datetime(df_s['销售时间'])
+    df_s['月份'] = df_s['销售时间'].dt.to_period('M')
+    df_s['成本率'] = df_s['商品分类'].map(CATEGORY_COST_RATIOS).fillna(CATEGORY_COST_RATIOS['default'])
+    df_s['商品成本'] = df_s['商品总价'] * df_s['成本率']
+
+    opex_ratio = financial_params.get("运营管理", 0.0438)
+    fixed_cost = financial_params.get("固定支出", 5000)
+
+    monthly_rev = df_d.groupby('月份')['实收金额'].sum()
+    monthly_cost = df_s.groupby('月份')['商品成本'].sum()
+
+    trend = pd.DataFrame({
+        '营业收入': monthly_rev,
+        '原料成本': monthly_cost,
+    })
+    trend['毛利'] = trend['营业收入'] - trend['原料成本']
+    trend['运营管理成本'] = trend['营业收入'] * opex_ratio
+    trend['固定支出'] = fixed_cost
+    trend['净利润'] = trend['毛利'] - trend['运营管理成本'] - trend['固定支出']
+    trend['净利率%'] = (trend['净利润'] / trend['营业收入'] * 100).round(1)
+
+    return trend.reset_index()

@@ -1,63 +1,56 @@
 """
-Target Check — Compare actual daily metrics against weekday-specific targets.
+目标对比 — 按星期几对比实际业绩与目标值
 """
 import pandas as pd
 from datetime import datetime
 
 
 WEEKDAY_TARGETS = {
-    "Monday":    {"revenue": 8000,  "tc": 200, "card": 2000, "cash": 7000},
-    "Tuesday":   {"revenue": 8000,  "tc": 200, "card": 2000, "cash": 7000},
-    "Wednesday": {"revenue": 8000,  "tc": 200, "card": 2000, "cash": 7000},
-    "Thursday":  {"revenue": 8000,  "tc": 200, "card": 2000, "cash": 7000},
-    "Friday":    {"revenue": 10000, "tc": 250, "card": 3000, "cash": 9000},
-    "Saturday":  {"revenue": 15000, "tc": 380, "card": 4000, "cash": 14000},
-    "Sunday":    {"revenue": 18000, "tc": 450, "card": 4000, "cash": 17000},
+    "周一": {"revenue": 14000, "tc": 350, "card": 4000, "cash": 13000},
+    "周二": {"revenue": 14000, "tc": 350, "card": 4000, "cash": 13000},
+    "周三": {"revenue": 14000, "tc": 350, "card": 4000, "cash": 13000},
+    "周四": {"revenue": 14000, "tc": 350, "card": 4000, "cash": 13000},
+    "周五": {"revenue": 16000, "tc": 400, "card": 5000, "cash": 14800},
+    "周六": {"revenue": 24000, "tc": 600, "card": 6000, "cash": 23000},
+    "周日": {"revenue": 28000, "tc": 700, "card": 6000, "cash": 26800},
 }
 
 
-def check_target(daily_summary_df: pd.DataFrame, date: str = None) -> dict:
+def check_target(daily_summary_df, date=None):
     """
-    Compare actual vs target for a given date.
+    对比实际 vs 目标。
 
     Args:
-        daily_summary_df: Output of calculate_daily_summary().
-        date: Target date string (YYYY-MM-DD). If None, uses the latest day.
+        daily_summary_df: calculate_daily_summary 的输出
+        date: 指定日期（格式 "YYYY-MM-DD 周X"），不指定则取最新一天
 
     Returns:
-        dict with revenue, target, achievement_rate, tc, target_tc, tc_rate
+        dict with 销售额, 目标, 达成率, TC, 目标TC, TC达成率
     """
     df = daily_summary_df.copy()
     if date:
-        row = df[df["date"].str.startswith(date)]
+        row = df[df["日期"].str.startswith(date)]
     else:
         row = df.tail(1)
 
     if row.empty:
-        return {"error": "No data for the specified date."}
+        return {"error": "无数据"}
 
-    date_str = str(row.iloc[0]["date"])
+    date_str = row.iloc[0]["日期"]
+    weekday = date_str.split(" ")[-1] if " " in date_str else "未知"
+    target = WEEKDAY_TARGETS.get(weekday, WEEKDAY_TARGETS["周一"])
 
-    # Determine weekday from date string
-    try:
-        dt = pd.to_datetime(date_str)
-        weekday_name = dt.strftime("%A")
-    except Exception:
-        weekday_name = "Monday"
-
-    target = WEEKDAY_TARGETS.get(weekday_name, WEEKDAY_TARGETS["Monday"])
-
-    revenue = float(row.iloc[0].get("amount", 0))
-    tc = int(row.iloc[0].get("orders", 0))
+    revenue = row.iloc[0]["实收金额"]
+    tc = row.iloc[0]["订单笔数"]
 
     return {
-        "date": date_str,
-        "weekday": weekday_name,
-        "revenue": revenue,
-        "target_revenue": target["revenue"],
-        "achievement_rate": f'{revenue / target["revenue"] * 100:.1f}%',
-        "tc": tc,
-        "target_tc": target["tc"],
-        "tc_achievement": f'{tc / target["tc"] * 100:.1f}%',
-        "deviation": f'{(revenue / target["revenue"] - 1) * 100:+.1f}%',
+        "日期": date_str,
+        "星期": weekday,
+        "销售额": revenue,
+        "目标销售额": target["revenue"],
+        "达成率": f'{revenue / target["revenue"] * 100:.1f}%',
+        "TC": tc,
+        "目标TC": target["tc"],
+        "TC达成率": f'{tc / target["tc"] * 100:.1f}%',
+        "偏差": f'{(revenue / target["revenue"] - 1) * 100:+.1f}%',
     }

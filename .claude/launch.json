@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web-dashboard",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["web_dashboard_server.py", "--host", "127.0.0.1", "--port", "8600"],
+      "port": 8600
+    }
+  ]
+}

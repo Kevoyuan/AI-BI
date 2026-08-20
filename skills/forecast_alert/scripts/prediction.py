@@ -1,116 +1,115 @@
 """
-Sales Forecast — weighted moving average, linear regression, weekday factor.
+销售预测 — 加权移动平均、线性回归、星期因子
 """
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+from numpy.polynomial.polynomial import polyfit
 
 
-def predict_tomorrow(sales_detail_df: pd.DataFrame) -> dict:
+def predict_tomorrow(sales_detail_df):
     """
-    Predict tomorrow's revenue using weighted average of last 4 same-weekday values.
+    预测明天销售额 — 近 4 周同星期加权平均。
 
     Returns:
-        dict with forecast, lower_bound, upper_bound, based_on, reference_data
+        dict with 预测, 置信下限, 置信上限, 近4周同天数据
     """
     df = sales_detail_df.copy()
-    date_col = "sale_date" if "sale_date" in df.columns else "date"
-    df[date_col] = pd.to_datetime(df[date_col])
-    df["weekday"] = df[date_col].dt.dayofweek
+    df['日期'] = pd.to_datetime(df['日期'])
+    df['星期'] = df['日期'].dt.dayofweek
 
     tomorrow_dow = (datetime.now() + timedelta(days=1)).weekday()
 
-    same_dow = df[df["weekday"] == tomorrow_dow]
+    same_dow = df[df['星期'] == tomorrow_dow]
     if same_dow.empty:
-        return {"error": "No same-weekday historical data available."}
+        return {"error": "无同星期历史数据"}
 
-    amount_col = "amount" if "amount" in df.columns else "revenue"
-    recent = same_dow.groupby(same_dow[date_col].dt.date)[amount_col].sum()
+    recent = same_dow.groupby(same_dow['日期'].dt.date)['实收金额'].sum()
     recent = recent.sort_index().tail(4)
 
-    weights = np.array([0.15, 0.20, 0.30, 0.35])  # More recent = higher weight
+    weights = np.array([0.15, 0.20, 0.30, 0.35])  # 越近权重越大
     n = len(recent)
     w = weights[-n:] / weights[-n:].sum()
 
-    predicted = float(np.dot(recent.values, w))
-    std = float(recent.std()) if n > 1 else 0
+    predicted = np.dot(recent.values, w)
+    std = recent.std()
 
     return {
-        "forecast": round(predicted, 0),
-        "lower_bound": round(predicted - std, 0),
-        "upper_bound": round(predicted + std, 0),
-        "based_on": f"last {n} same-weekday values",
-        "reference_data": {str(k): float(v) for k, v in recent.items()},
+        "预测明天销售额": round(predicted, 0),
+        "置信下限": round(predicted - std, 0),
+        "置信上限": round(predicted + std, 0),
+        "基于": f"近{n}个同星期",
+        "参考数据": recent.to_dict()
     }
 
 
-def predict_next_week(sales_detail_df: pd.DataFrame) -> dict:
+def predict_next_week(sales_detail_df):
     """
-    Predict next week's revenue — 8-week linear trend + recent baseline blend.
+    预测下周销售额 — 近 8 周线性回归 + 最近一周基准。
 
     Returns:
-        dict with forecast, trend_forecast, last_week_actual, trend_direction
+        dict with 预测, 趋势方向, 上周实际
     """
     df = sales_detail_df.copy()
-    date_col = "sale_date" if "sale_date" in df.columns else "date"
-    df[date_col] = pd.to_datetime(df[date_col])
+    df['日期'] = pd.to_datetime(df['日期'])
 
-    df["week"] = df[date_col].dt.isocalendar().week.astype(int)
-    df["year"] = df[date_col].dt.isocalendar().year.astype(int)
+    # 按周汇总
+    df['周'] = df['日期'].dt.isocalendar().week.astype(int)
+    df['年'] = df['日期'].dt.isocalendar().year.astype(int)
 
-    amount_col = "amount" if "amount" in df.columns else "revenue"
-    weekly = df.groupby(["year", "week"])[amount_col].sum().reset_index()
-    weekly["week_seq"] = range(len(weekly))
+    weekly = df.groupby(['年', '周'])['实收金额'].sum().reset_index()
+    weekly['周序数'] = range(len(weekly))
 
-    coefs = np.polyfit(weekly["week_seq"], weekly[amount_col], 1)
+    # 线性回归
+    coefs = np.polyfit(weekly['周序数'], weekly['实收金额'], 1)
     trend_fn = np.poly1d(coefs)
 
-    last_week_value = float(weekly[amount_col].iloc[-1])
+    last_week_value = weekly['实收金额'].iloc[-1]
     next_idx = len(weekly)
-    predicted = float(trend_fn(next_idx))
+    predicted = trend_fn(next_idx)
 
+    # 结合最近一周基准和趋势预测
     blended = last_week_value * 0.6 + predicted * 0.4
 
     return {
-        "forecast": round(blended, 0),
-        "trend_forecast": round(predicted, 0),
-        "last_week_actual": round(last_week_value, 0),
-        "trend_direction": "up" if coefs[0] > 0 else "down",
-        "weekly_change": round(float(coefs[0]), 0),
+        "预测下周销售额": round(blended, 0),
+        "纯趋势预测": round(predicted, 0),
+        "上周实际": round(last_week_value, 0),
+        "趋势方向": "上升" if coefs[0] > 0 else "下降",
+        "周均变化": round(coefs[0], 0)
     }
 
 
-def predict_next_month(sales_detail_df: pd.DataFrame) -> dict:
+def predict_next_month(sales_detail_df):
     """
-    Predict next month's revenue — linear trend over all historical months.
+    预测下月销售额 — 12 个月线性趋势 + 月度季节性调整。
 
     Returns:
-        dict with forecast, trend_direction, r_squared, confidence
+        dict with 预测, 趋势, R²
     """
     df = sales_detail_df.copy()
-    date_col = "sale_date" if "sale_date" in df.columns else "date"
-    df[date_col] = pd.to_datetime(df[date_col])
-    df["month"] = df[date_col].dt.to_period("M")
+    df['日期'] = pd.to_datetime(df['日期'])
+    df['月份'] = df['日期'].dt.to_period('M')
 
-    amount_col = "amount" if "amount" in df.columns else "revenue"
-    monthly = df.groupby("month")[amount_col].sum().reset_index()
-    monthly["month_seq"] = range(len(monthly))
+    monthly = df.groupby('月份')['实收金额'].sum().reset_index()
+    monthly['月份序数'] = range(len(monthly))
 
-    coefs = np.polyfit(monthly["month_seq"], monthly[amount_col], 1)
+    coefs = np.polyfit(monthly['月份序数'], monthly['实收金额'], 1)
     trend_fn = np.poly1d(coefs)
 
-    predicted_vals = trend_fn(monthly["month_seq"])
-    ss_res = ((monthly[amount_col] - predicted_vals) ** 2).sum()
-    ss_tot = ((monthly[amount_col] - monthly[amount_col].mean()) ** 2).sum()
-    r_squared = float(1 - ss_res / ss_tot) if ss_tot > 0 else 0
+    # R²
+    predicted_vals = trend_fn(monthly['月份序数'])
+    ss_res = ((monthly['实收金额'] - predicted_vals) ** 2).sum()
+    ss_tot = ((monthly['实收金额'] - monthly['实收金额'].mean()) ** 2).sum()
+    r_squared = 1 - ss_res / ss_tot
 
     next_idx = len(monthly)
-    predicted = float(trend_fn(next_idx))
+    predicted = trend_fn(next_idx)
 
     return {
-        "forecast": round(predicted, 0),
-        "trend_direction": "up" if coefs[0] > 0 else "down",
-        "monthly_change": round(float(coefs[0]), 0),
-        "r_squared": round(r_squared, 3),
-        "confidence": "high" if r_squared > 0.7 else ("medium" if r_squared > 0.4 else "low"),
+        "预测下月销售额": round(predicted, 0),
+        "趋势方向": "上升" if coefs[0] > 0 else "下降",
+        "月均变化量": round(coefs[0], 0),
+        "R²": round(r_squared, 3),
+        "置信度": "高" if r_squared > 0.7 else ("中" if r_squared > 0.4 else "低")
     }

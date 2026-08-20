@@ -1,128 +1,179 @@
 """
-Daily Summary Script
-Computes a day-by-day summary DataFrame from the raw sales, waste,
-and membership DataFrames.
-
-Exported:
-    calculate_daily_summary(df_sales, df_waste, df_memberships,
-                            financial_params, df_weather) -> pd.DataFrame
+每日经营汇总 — 从 sales/loss/cards/weather 计算每日关键指标
+提取自 modules/analysis.py 的 calculate_daily_summary
 """
 import pandas as pd
 import numpy as np
-from datetime import date
-from typing import Dict
+from modules.config import CATEGORY_COST_RATIOS
+
+
+def _calc_loss_by_remark(loss_df, pattern, exclude_tasting=True):
+    """按备注模式过滤报损金额"""
+    mask = loss_df["备注"].str.contains(pattern, na=False)
+    if exclude_tasting:
+        mask &= ~loss_df["备注"].str.contains("试吃", na=False)
+        mask &= loss_df["报损原因"].shift(-1).fillna('') != "试吃"
+    return (
+        loss_df[mask]
+        .groupby("调整日期")["报损金额"]
+        .sum()
+        .reset_index()
+        .rename(columns={"调整日期": "日期", "报损金额": pattern})
+    ).fillna(0)
+
+
+def _calc_tasting_loss(loss_df):
+    """试吃报损"""
+    mask = (
+        loss_df["备注"].str.contains("试吃", na=False)
+        | (loss_df["报损原因"].shift(-1).fillna('') == "试吃")
+    )
+    return (
+        loss_df[mask]
+        .groupby("调整日期")["报损金额"]
+        .sum()
+        .reset_index()
+        .rename(columns={"调整日期": "日期", "报损金额": "试吃"})
+    ).fillna(0)
+
+
+def _calc_category_cost(sales_df, raw_material_ratio=0.40):
+    """按商品分类计算每日成本"""
+    if sales_df.empty or '商品分类' not in sales_df.columns:
+        daily_cost = sales_df.groupby(sales_df['销售时间'].dt.date)['商品总价'].sum() * raw_material_ratio
+        return daily_cost.reset_index().rename(columns={'销售时间': '日期', '商品总价': '商品成本'})
+
+    s = sales_df.copy()
+    s['成本率'] = s['商品分类'].map(CATEGORY_COST_RATIOS).fillna(CATEGORY_COST_RATIOS['default'])
+    s['商品成本'] = s['商品总价'] * s['成本率']
+    daily_cost = s.groupby(s['销售时间'].dt.date)['商品成本'].sum()
+    return daily_cost.reset_index().rename(columns={'销售时间': '日期'})
+
+
+def _calc_loss_cost(loss_df, raw_material_ratio=0.40):
+    """按商品分类计算损耗成本"""
+    if loss_df.empty or '商品分类' not in loss_df.columns:
+        daily = loss_df.groupby('调整日期')['报损金额'].sum() * raw_material_ratio
+        return daily.reset_index().rename(columns={'调整日期': '日期', '报损金额': '损耗成本'})
+
+    l = loss_df.copy()
+    l['成本率'] = l['商品分类'].map(CATEGORY_COST_RATIOS).fillna(CATEGORY_COST_RATIOS['default'])
+    l['损耗成本'] = l['报损金额'] * l['成本率']
+    daily = l.groupby('调整日期')['损耗成本'].sum()
+    return daily.reset_index().rename(columns={'调整日期': '日期'})
 
 
 def calculate_daily_summary(
-    df_sales: pd.DataFrame,
-    df_waste: pd.DataFrame,
-    df_memberships: pd.DataFrame,
-    financial_params: Dict[str, float],
-    df_weather: pd.DataFrame,
-) -> pd.DataFrame:
+    sales_df, loss_df, cards_df, financial_params, weather_df=None
+):
     """
-    Aggregate raw transaction data into a daily summary.
+    计算每日经营汇总。
 
-    Columns in the result:
-        date, amount, list_total, orders, avg_check,
-        net_profit, profit_margin,
-        cogs, op_cost, fixed_cost,
-        waste_total, samples, waste_fresh, waste_pastry,
-        weather
+    Args:
+        sales_df: sales 表 DataFrame
+        loss_df: loss 表 DataFrame
+        cards_df: cards 表 DataFrame
+        financial_params: dict with 固定支出, 原料成本比, 运营管理
+        weather_df: weather 表 DataFrame（可选）
+
+    Returns:
+        DataFrame with columns: 日期, 商品总价, 实收金额, 订单笔数, 天气,
+        损耗价值总计, 试吃, 现烤报废, 西点报废, 商品成本, 损耗成本,
+        运营成本, 固定支出, 净利润, 净利润率
     """
-    if df_sales.empty or "sale_time" not in df_sales.columns:
-        return pd.DataFrame()
+    fixed_cost = financial_params.get("固定支出", 0)
+    raw_material_ratio = financial_params.get("原料成本比", 0)
+    operation_management = financial_params.get("运营管理", 0)
 
-    fixed_cost   = financial_params.get("fixed_cost",    1500.0)
-    cogs_ratio   = financial_params.get("cogs_ratio",    0.35)
-    op_ratio     = financial_params.get("op_cost_ratio", 0.12)
-
-    # ── Sales aggregation ─────────────────────────────────────────────────────
-    s = df_sales.copy()
-    s["_date"] = s["sale_time"].dt.date
-
-    daily = (
-        s.groupby("_date")
-        .agg(
-            amount    =("amount",    "sum"),
-            list_total=("list_price","sum"),
-            orders    =("order_id",  "nunique"),
-        )
+    # 订单笔数 (TC)
+    order_counts = (
+        sales_df.groupby(sales_df["销售时间"].dt.date)["流水号"]
+        .nunique()
         .reset_index()
-        .rename(columns={"_date": "date"})
+        .rename(columns={"流水号": "订单笔数", "销售时间": "日期"})
     )
-    daily["avg_check"] = daily["amount"] / daily["orders"].replace(0, np.nan)
 
-    # ── Waste aggregation ─────────────────────────────────────────────────────
-    waste_cols = {
-        "waste_fresh":  ("note", "fresh_baked"),
-        "waste_pastry": ("note", "pastry|cake"),
-        "samples":      ("note", "sample"),
-    }
+    # 销售汇总
+    sales_summary = (
+        sales_df.groupby(sales_df["销售时间"].dt.date)
+        .agg({"商品总价": "sum", "实收金额": "sum"})
+        .reset_index()
+        .rename(columns={"销售时间": "日期"})
+    )
+    daily = pd.merge(sales_summary, order_counts, on="日期", how="left")
 
-    if not df_waste.empty and "adj_date" in df_waste.columns and "waste_amount" in df_waste.columns:
-        w = df_waste.copy()
-        w["adj_date"] = pd.to_datetime(w["adj_date"]).dt.date
-        w["note"]     = w.get("note", pd.Series()).fillna("").astype(str)
-
-        def _waste_by_date_and_pattern(pattern: str, exclude: str = "") -> pd.Series:
-            mask = w["note"].str.contains(pattern, case=False, na=False)
-            if exclude:
-                mask &= ~w["note"].str.contains(exclude, case=False, na=False)
-            return w[mask].groupby("adj_date")["waste_amount"].sum()
-
-        daily = daily.merge(
-            _waste_by_date_and_pattern("fresh_baked", "sample")
-                .rename("waste_fresh").reset_index().rename(columns={"adj_date": "date"}),
-            on="date", how="left",
-        )
-        daily = daily.merge(
-            _waste_by_date_and_pattern("pastry|cake", "sample")
-                .rename("waste_pastry").reset_index().rename(columns={"adj_date": "date"}),
-            on="date", how="left",
-        )
-        daily = daily.merge(
-            _waste_by_date_and_pattern("sample")
-                .rename("samples").reset_index().rename(columns={"adj_date": "date"}),
-            on="date", how="left",
-        )
-        daily[["waste_fresh", "waste_pastry", "samples"]] = (
-            daily[["waste_fresh", "waste_pastry", "samples"]].fillna(0)
-        )
-        daily["waste_total"] = daily["waste_fresh"] + daily["waste_pastry"]
+    # 天气
+    if weather_df is not None and not weather_df.empty and "日期" in weather_df.columns:
+        w = weather_df.copy()
+        if pd.api.types.is_datetime64_any_dtype(w['日期']):
+            w['日期'] = w['日期'].dt.date
+        w = w.groupby("日期")["天气"].first().reset_index()
+        daily = pd.merge(daily, w, on="日期", how="left")
     else:
-        daily["waste_fresh"] = daily["waste_pastry"] = daily["samples"] = daily["waste_total"] = 0.0
+        daily["天气"] = "无数据"
 
-    # ── Membership (recharge) ─────────────────────────────────────────────────
-    if not df_memberships.empty and "date" in df_memberships.columns and "recharge_amt" in df_memberships.columns:
-        m = df_memberships.copy()
-        m["_date"] = pd.to_datetime(m["date"]).dt.date
-        mem_daily = m.groupby("_date")["recharge_amt"].sum().reset_index()
-        mem_daily.columns = ["date", "recharge_amt"]
-        daily = daily.merge(mem_daily, on="date", how="left")
-        daily["recharge_amt"] = daily["recharge_amt"].fillna(0)
-    else:
-        daily["recharge_amt"] = 0.0
+    # 损耗价值总计
+    loss_value = (
+        loss_df.groupby("调整日期")["报损金额"]
+        .sum()
+        .reset_index()
+        .rename(columns={"调整日期": "日期", "报损金额": "损耗价值总计"})
+    )
+    daily = pd.merge(daily, loss_value, on="日期", how="left").fillna({"损耗价值总计": 0})
 
-    # ── Weather ───────────────────────────────────────────────────────────────
-    if not df_weather.empty and "date" in df_weather.columns:
-        wth = df_weather[["date", "condition"]].copy()
-        wth["date"] = pd.to_datetime(wth["date"]).dt.date
-        daily = daily.merge(wth, on="date", how="left")
-        daily["condition"] = daily["condition"].fillna("unknown")
-    else:
-        daily["condition"] = "unknown"
+    # 储值卡赠送消费
+    cards_summary = (
+        cards_df.groupby(cards_df["日期"].dt.date)
+        .agg({"赠送消费金额": "sum"})
+        .reset_index()
+    )
+    daily = pd.merge(daily, cards_summary, on="日期", how="left").fillna({"赠送消费金额": 0})
 
-    # ── Financial calculations ────────────────────────────────────────────────
-    daily["cogs"]          = (daily["list_total"] + daily["waste_total"]) * cogs_ratio
-    daily["op_cost"]       = daily["amount"] * op_ratio
-    daily["fixed_cost"]    = fixed_cost
-    daily["net_profit"]    = daily["amount"] - daily["cogs"] - daily["op_cost"] - daily["fixed_cost"]
-    daily["profit_margin"] = daily["net_profit"] / daily["amount"].replace(0, np.nan)
-    daily["profit_margin"] = daily["profit_margin"].fillna(0)
+    # 报损分类
+    for pattern, col_name in [
+        ("试吃", "试吃"),
+        ("现烤", "现烤报废"),
+        ("西点", "西点报废"),
+        ("蛋糕", "蛋糕报损"),
+        ("饼干", "饼干报损"),
+        ("带走", "股东带走"),
+        ("非正常", "非正常报损"),
+    ]:
+        is_tasting = pattern == "试吃"
+        if is_tasting:
+            ldf = _calc_tasting_loss(loss_df)
+        else:
+            ldf = _calc_loss_by_remark(loss_df, pattern)
+        daily = pd.merge(daily, ldf, on="日期", how="left").fillna({ldf.columns[-1]: 0})
+        if ldf.columns[-1] != col_name:
+            daily = daily.rename(columns={ldf.columns[-1]: col_name})
 
-    # ── Sort by date ──────────────────────────────────────────────────────────
-    daily = daily.sort_values("date").reset_index(drop=True)
-    daily["date"] = daily["date"].astype(str)
+    # 成本和利润
+    daily["固定支出"] = fixed_cost
+    daily["原料成本比"] = raw_material_ratio
+    daily["运营管理"] = operation_management
+
+    category_costs = _calc_category_cost(sales_df, raw_material_ratio)
+    daily = pd.merge(daily, category_costs, on="日期", how="left").fillna({"商品成本": 0})
+
+    loss_costs = _calc_loss_cost(loss_df, raw_material_ratio)
+    daily = pd.merge(daily, loss_costs, on="日期", how="left").fillna({"损耗成本": 0})
+
+    daily["运营成本"] = daily["实收金额"] * daily["运营管理"]
+
+    daily["净利润"] = (
+        daily["实收金额"]
+        - daily["商品成本"]
+        - daily["损耗成本"]
+        - daily["运营成本"]
+        - daily["固定支出"]
+    )
+    daily["净利润率"] = daily["净利润"] / daily["实收金额"]
+
+    # 日期格式化
+    weekday_dict = {0: "周一", 1: "周二", 2: "周三", 3: "周四", 4: "周五", 5: "周六", 6: "周日"}
+    daily["日期"] = daily["日期"].apply(
+        lambda d: d.strftime("%Y-%m-%d") + " " + weekday_dict[d.weekday()]
+    )
 
     return daily

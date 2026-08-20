@@ -1,50 +1,41 @@
-# Environment
-.env
-*.env.local
-
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-.venv/
-venv/
-env/
-*.egg-info/
-dist/
-build/
-
-# Data files (never commit real data)
-database/*.db
-data/*.xls
-data/*.xlsx
-data/*.csv
-data/*.json
-data/*.txt
-!data/mock/
-
-# Streamlit
-.streamlit/secrets.toml
-.streamlit/*.local.toml
-
-# Sessions
-sessions/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# IDE
-.idea/
-.vscode/
-*.swp
-
-# Testing
+*.py[cod]
+*$py.class
 .pytest_cache/
 .coverage
 htmlcov/
+dist/
+build/
+*.egg-info/
+.venv/
+env/
+venv/
 
-# Logs
-*.log
-logs/
+# Environment and secrets
+.env
+.env.local
+.streamlit/secrets.toml
+
+# Database and reports (exclude real / large databases from git)
+database/*.db
+database/*.xlsx
+database/*.xls
+database/*.csv
+data/*.xlsx
+data/*.xls
+data/*.csv
+!data/mock/
+sessions/
+reports/visualizations/*
+!reports/visualizations/.gitkeep
+
+# System & IDE
+.DS_Store
+.cursorrules
+.vscode/
+.idea/
+.gstack/
+
+# Agent customizations & local skill symlinks
+.agents/

@@ -9,13 +9,12 @@ from unittest.mock import MagicMock, patch
 
 
 class MockProvider:
-    """Programmable Mock LLM Provider — injects specific responses."""
+    """可编程的 Mock LLM Provider，用于注入特定响应。"""
 
     def __init__(self, responses=None, json_responses=None):
         """
-        Args:
-            responses:      dict[str, str]  — match by prefix in system/user prompt
-            json_responses: dict[str, dict] — match by prefix, auto-serialised to JSON
+        responses: dict[str, str] — 按 system_prompt 前缀匹配返回文本
+        json_responses: dict[str, dict] — 按 prefix 匹配返回 dict（会自动 json.dumps）
         """
         self.responses = responses or {}
         self.json_responses = json_responses or {}
@@ -61,7 +60,7 @@ class MockProvider:
         # Yield in chunks to simulate real streaming
         chunk_size = max(1, len(text) // 5)
         for i in range(0, len(text), chunk_size):
-            yield text[i : i + chunk_size]
+            yield text[i:i + chunk_size]
 
 
 @pytest.fixture
@@ -71,28 +70,28 @@ def mock_provider():
 
 @pytest.fixture
 def sample_dataframes():
-    """Return sample DataFrames simulating business data."""
+    """返回示例 DataFrame，模拟业务数据。"""
     dates = pd.date_range("2026-04-01", periods=10, freq="D")
     sales = pd.DataFrame({
-        "date": dates,
-        "amount": np.random.randint(8000, 20000, 10).astype(float),
-        "category": ["fresh_baked", "pastry", "beverages", "fresh_baked", "pastry"] * 2,
-        "order_id": [f"ORD{i:04d}" for i in range(10)],
-        "product": [f"Product_{i}" for i in range(10)],
+        "日期": dates,
+        "实收金额": np.random.randint(8000, 20000, 10).astype(float),
+        "商品分类": ["现烤", "西点", "饮品", "现烤", "西点"] * 2,
+        "流水号": [f"LS{i:04d}" for i in range(10)],
+        "商品名称": [f"产品{i}" for i in range(10)],
     })
-    waste = pd.DataFrame({
-        "date": dates,
-        "waste_amount": np.random.randint(100, 1000, 10).astype(float),
-        "category": ["fresh_baked", "pastry"] * 5,
-        "note": ["", "sample", "", "", "owner", "", "", "", "", ""],
-        "reason": ["", "", "sample", "", "", "", "", "", "", ""],
+    loss = pd.DataFrame({
+        "日期": dates,
+        "报损金额": np.random.randint(100, 1000, 10).astype(float),
+        "商品分类": ["现烤", "西点"] * 5,
+        "备注": ["", "试吃", "", "", "股东带走", "", "", "", "", ""],
+        "报损原因": ["", "", "试吃", "", "", "", "", "", "", ""],
     })
-    return {"sales": sales, "waste": waste, "weather": pd.DataFrame()}
+    return {"sales": sales, "loss": loss, "weather": pd.DataFrame()}
 
 
 @pytest.fixture
 def sample_history():
     return [
-        {"role": "user", "content": "What was yesterday's revenue?"},
-        {"role": "assistant", "content": "Yesterday's revenue was $15,230."},
+        {"role": "user", "content": "昨天的销售额是多少？"},
+        {"role": "assistant", "content": "昨天销售额为 15,230 元。"},
     ]

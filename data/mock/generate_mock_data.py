@@ -1,18 +1,20 @@
 """
-Mock Data Generator
-Generates realistic demo SQLite databases for local development and testing.
-Run this script once to populate the database/ directory with sample data.
+Mock Data Generator - 高保真脱敏合成数据生成器
+生成符合 retail/bakery 业务真实分布的 SQLite 月度数据库。
+支持全部 9 张标准表：sales, loss, cards, cards_detail, sales_detail, financial, weather, member_card, openning_cost
 
-Usage:
+运行方式：
     python data/mock/generate_mock_data.py
-
-Output:
-    database/sales_data_YYYYMM.db  (last 3 months)
+输出：
+    database/business_data_YYYYMM.db (覆盖历史与近期月份)
 """
+from __future__ import annotations
+
+import calendar
 import os
-import sqlite3
 import random
-from datetime import date, timedelta
+import sqlite3
+from datetime import date, datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -21,198 +23,282 @@ RANDOM_SEED = 42
 random.seed(RANDOM_SEED)
 np.random.seed(RANDOM_SEED)
 
-DB_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "database")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DB_DIR = os.path.join(BASE_DIR, "database")
 os.makedirs(DB_DIR, exist_ok=True)
 
-# ── Demo product catalogue ─────────────────────────────────────────────────────
+# ── 商品库与分类定义 ─────────────────────────────────────────────────────────────
 PRODUCTS = [
-    ("Croissant",         "fresh_baked",  4.5,  0.35),
-    ("Pain au chocolat",  "fresh_baked",  5.0,  0.35),
-    ("Sourdough loaf",    "fresh_baked",  9.0,  0.35),
-    ("Cinnamon roll",     "pastry",       4.0,  0.40),
-    ("Cheese danish",     "pastry",       4.5,  0.40),
-    ("Almond croissant",  "pastry",       5.5,  0.40),
-    ("Birthday cake 6\"", "birthday_cake",38.0, 0.40),
-    ("Sharing cake 8\"",  "sharing_cake", 48.0, 0.40),
-    ("Shortbread pack",   "handcraft",    6.5,  0.35),
-    ("Brownie",           "handcraft",    3.5,  0.35),
-    ("Latte",             "beverages",    5.0,  0.90),
-    ("Cappuccino",        "beverages",    4.8,  0.90),
-    ("Matcha latte",      "beverages",    5.5,  0.90),
-    ("Orange juice",      "beverages",    4.0,  0.90),
+    # (商品名称, 商品分类, 收入分类, 原价, 原料成本率)
+    ("法式原味可颂", "现烤面包", "现烤", 12.0, 0.32),
+    ("海盐芝士吐司", "现烤面包", "现烤", 18.0, 0.30),
+    ("日式红豆包", "现烤面包", "现烤", 8.0, 0.28),
+    ("法棍面包", "现烤面包", "现烤", 15.0, 0.25),
+    ("黑麦全麦欧包", "现烤面包", "现烤", 22.0, 0.33),
+    ("碱水牛角包", "现烤面包", "现烤", 14.0, 0.30),
+    ("肉松小贝", "精选西点", "西点", 16.0, 0.38),
+    ("巴斯克芝士切块", "精选西点", "西点", 28.0, 0.40),
+    ("草莓奶油切块", "精选西点", "西点", 32.0, 0.42),
+    ("提拉米苏", "精选西点", "西点", 26.0, 0.36),
+    ("经典曲奇礼盒", "常温伴手礼", "其他", 45.0, 0.35),
+    ("布朗尼蛋糕", "精选西点", "西点", 18.0, 0.34),
+    ("生椰拿铁", "咖啡饮品", "饮品", 20.0, 0.20),
+    ("美式咖啡", "咖啡饮品", "饮品", 15.0, 0.15),
+    ("燕麦拿铁", "咖啡饮品", "饮品", 22.0, 0.22),
+    ("白桃乌龙柠檬茶", "咖啡饮品", "饮品", 18.0, 0.20),
+    ("6寸动物奶油蛋糕", "生日蛋糕", "蛋糕", 168.0, 0.38),
+    ("8寸水果双层蛋糕", "生日蛋糕", "蛋糕", 238.0, 0.40),
 ]
 
-PAYMENT_TYPES = ["digital_pay", "cash", "card_pay", "platform_pay"]
+PAYMENT_METHODS = ["微信支付", "支付宝", "储值卡支付", "现金", "美团券"]
+PAYMENT_WEIGHTS = [0.55, 0.25, 0.12, 0.05, 0.03]
 
-WEATHER_CONDITIONS = ["sunny", "cloudy", "overcast", "light_rain", "moderate_rain"]
-WEATHER_WEIGHTS    = [0.40,    0.25,    0.15,        0.12,          0.08]
-WEATHER_MULTIPLIER = {"sunny": 1.00, "cloudy": 0.95, "overcast": 0.90,
-                      "light_rain": 0.80, "moderate_rain": 0.65}
+SOURCES = ["门店", "自营小程序", "美团", "饿了么"]
+SOURCE_WEIGHTS = [0.70, 0.15, 0.10, 0.05]
 
+LOSS_REASONS = ["隔夜过期", "试吃损耗", "制作失误", "运输破损", "员工试吃"]
+LOSS_WEIGHTS = [0.50, 0.25, 0.12, 0.08, 0.05]
 
-def _simulate_day(day: date, weather: str) -> tuple[list, list]:
-    """Return (sales_rows, waste_rows) for one day."""
-    weekday = day.weekday()
-
-    # Base order count by day type
-    if weekday <= 3:
-        base_orders = random.randint(150, 250)
-    elif weekday == 4:
-        base_orders = random.randint(200, 300)
-    elif weekday == 5:
-        base_orders = random.randint(300, 450)
-    else:
-        base_orders = random.randint(350, 500)
-
-    base_orders = int(base_orders * WEATHER_MULTIPLIER[weather])
-
-    # Sales
-    sales = []
-    for order_num in range(base_orders):
-        order_id  = f"{day.strftime('%Y%m%d')}-{order_num:04d}"
-        n_items   = max(1, int(np.random.poisson(2.5)))
-        hour      = _pick_hour()
-        minute    = random.randint(0, 59)
-        ts        = f"{day} {hour:02d}:{minute:02d}:00"
-
-        order_total = 0.0
-        for _ in range(n_items):
-            product, category, price, _ = random.choice(PRODUCTS)
-            qty = 1
-            disc = random.choice([0, 0, 0, 0.1, 0.2])
-            actual = round(price * (1 - disc), 2)
-            order_total += actual
-            sales.append({
-                "sale_time":   ts,
-                "product":     product,
-                "category":    category,
-                "list_price":  price,
-                "amount":      actual,
-                "qty":         qty,
-                "order_id":    order_id,
-            })
-
-        # Payment split
-        pay_type = random.choices(PAYMENT_TYPES, weights=[0.65, 0.10, 0.20, 0.05])[0]
-        sales[-n_items:] = [
-            {**r, "payment_type": pay_type} for r in sales[-n_items:]
-        ]
-
-    # Waste
-    waste = []
-    n_waste = random.randint(3, 12)
-    for _ in range(n_waste):
-        product, category, price, _ = random.choice(
-            [p for p in PRODUCTS if p[1] in ("fresh_baked", "pastry", "handcraft")]
-        )
-        qty    = random.randint(1, 5)
-        reason = random.choice(["end_of_day", "damaged", "sample", "quality_issue"])
-        note   = f"{category} - {reason}"
-        audit_hour = random.randint(18, 23)
-        adj_ts     = f"{day} {audit_hour}:00:00"
-        adj_date   = day
-
-        waste.append({
-            "audit_time":   adj_ts,
-            "adj_date":     str(adj_date),
-            "product":      product,
-            "category":     category,
-            "waste_amount": round(price * qty * 0.8, 2),
-            "qty":          qty,
-            "note":         note,
-            "reason":       reason,
-        })
-
-    return sales, waste
+WEATHER_TYPES = ["晴", "多云", "阴", "小雨", "大雨"]
+WEATHER_WEIGHTS = [0.45, 0.25, 0.15, 0.10, 0.05]
+WEATHER_IMPACT = {"晴": 1.05, "多云": 1.0, "阴": 0.95, "小雨": 0.82, "大雨": 0.65}
 
 
 def _pick_hour() -> int:
-    """Return a realistic operating hour weighted by typical foot traffic."""
-    hours   = list(range(7, 22))
-    weights = [2, 5, 8, 10, 8, 6, 10, 12, 10, 8, 6, 5, 4, 3, 2]
+    """根据零售时段客流分布随机生成小时 (7:00 ~ 21:00)"""
+    hours = list(range(7, 22))  # 7 to 21 -> 15 items
+    weights = [
+        0.02, 0.08, 0.08, 0.06, 0.07,  # 7, 8, 9, 10, 11
+        0.11, 0.08, 0.06, 0.07, 0.09,  # 12, 13, 14, 15, 16
+        0.12, 0.08, 0.05, 0.02, 0.01   # 17, 18, 19, 20, 21
+    ]
     return random.choices(hours, weights=weights)[0]
 
 
-def generate_month(year: int, month: int) -> None:
-    """Generate and write one month of demo data to a SQLite database."""
-    month_str = f"{year}{month:02d}"
-    db_path   = os.path.join(DB_DIR, f"sales_data_{month_str}.db")
+def generate_month_database(year: int, month: int, db_path: str):
+    """为指定年月生成单月完整 SQLite 数据库"""
+    num_days = calendar.monthrange(year, month)[1]
+    
+    sales_rows = []
+    loss_rows = []
+    cards_rows = []
+    cards_detail_rows = []
+    sales_detail_rows = []
+    weather_rows = []
 
-    all_sales, all_waste = [], []
+    cum_member_balance = 120000.0
 
-    start = date(year, month, 1)
-    end   = (date(year, month + 1, 1) - timedelta(days=1)) if month < 12 else date(year, 12, 31)
+    for d in range(1, num_days + 1):
+        cur_date = date(year, month, d)
+        date_str = cur_date.strftime("%Y-%m-%d")
+        weekday = cur_date.weekday()
+        is_weekend = weekday >= 5
 
-    weather_log = []
-    day = start
-    while day <= end:
-        cond = random.choices(WEATHER_CONDITIONS, weights=WEATHER_WEIGHTS)[0]
-        weather_log.append({"date": str(day), "condition": cond})
-
-        sales, waste = _simulate_day(day, cond)
-        all_sales.extend(sales)
-        all_waste.extend(waste)
-        day += timedelta(days=1)
-
-    df_sales   = pd.DataFrame(all_sales)
-    df_waste   = pd.DataFrame(all_waste)
-    df_weather = pd.DataFrame(weather_log)
-
-    # Membership recharge (aggregated daily)
-    mem_rows = []
-    for entry in weather_log:
-        n = random.randint(2, 15)
-        mem_rows.append({
-            "date":          entry["date"],
-            "recharge_amt":  round(n * random.uniform(30, 80), 2),
-            "consumed_amt":  round(n * random.uniform(20, 60), 2),
-            "principal_amt": round(n * random.uniform(15, 50), 2),
-            "gift_amt":      round(n * random.uniform(5, 20), 2),
+        # 1. 天气数据
+        w_type = random.choices(WEATHER_TYPES, weights=WEATHER_WEIGHTS)[0]
+        base_temp = 22 + 6 * np.sin((month - 1) * np.pi / 6)
+        t_high = round(base_temp + random.uniform(2, 6), 1)
+        t_low = round(base_temp - random.uniform(2, 6), 1)
+        weather_rows.append({
+            "日期": date_str,
+            "天气": w_type,
+            "最高温": t_high,
+            "最低温": t_low,
         })
-    df_memberships = pd.DataFrame(mem_rows)
 
-    with sqlite3.connect(db_path) as conn:
-        df_sales.to_sql("sales",       conn, if_exists="replace", index=False)
-        df_waste.to_sql("waste",       conn, if_exists="replace", index=False)
-        df_weather.to_sql("weather",   conn, if_exists="replace", index=False)
-        df_memberships.to_sql("memberships", conn, if_exists="replace", index=False)
+        # 2. 销售订单生成
+        base_orders = random.randint(180, 260) if not is_weekend else random.randint(280, 420)
+        base_orders = int(base_orders * WEATHER_IMPACT[w_type])
 
-    print(f"✅ Generated {db_path} — {len(df_sales)} sales rows, {len(df_waste)} waste rows")
+        day_recharge_total = 0.0
+        day_card_spend_total = 0.0
+
+        for order_idx in range(1, base_orders + 1):
+            order_id = f"LS{year}{month:02d}{d:02d}-{order_idx:04d}"
+            hour = _pick_hour()
+            minute = random.randint(0, 59)
+            second = random.randint(0, 59)
+            sale_time_str = f"{date_str} {hour:02d}:{minute:02d}:{second:02d}"
+            
+            num_items = max(1, int(np.random.poisson(2.2)))
+            pay_method = random.choices(PAYMENT_METHODS, weights=PAYMENT_WEIGHTS)[0]
+            source = random.choices(SOURCES, weights=SOURCE_WEIGHTS)[0]
+
+            order_orig_total = 0.0
+            order_actual_total = 0.0
+            order_profit_total = 0.0
+
+            for _ in range(num_items):
+                p_name, p_cat, p_income_cat, p_price, p_cost_rate = random.choice(PRODUCTS)
+                qty = random.choices([1, 2, 3], weights=[0.8, 0.15, 0.05])[0]
+                
+                discount_rate = random.choices([0.0, 0.05, 0.10, 0.15], weights=[0.75, 0.15, 0.07, 0.03])[0]
+                item_orig = round(p_price * qty, 2)
+                item_actual = round(item_orig * (1 - discount_rate), 2)
+                item_cost = round(item_actual * p_cost_rate, 2)
+                item_profit = round(item_actual - item_cost, 2)
+
+                order_orig_total += item_orig
+                order_actual_total += item_actual
+                order_profit_total += item_profit
+
+                sales_rows.append({
+                    "销售时间": sale_time_str,
+                    "流水号": order_id,
+                    "商品名称": p_name,
+                    "商品分类": p_cat,
+                    "收入分类": p_income_cat,
+                    "销售数量": qty,
+                    "商品原价": p_price,
+                    "商品总价": item_orig,
+                    "实收金额": item_actual,
+                    "成本": item_cost,
+                    "利润": item_profit,
+                    "支付方式": pay_method,
+                    "来源": source,
+                    "收银员": "系统收银",
+                    "日期": date_str,
+                    "小时": hour,
+                })
+
+            sales_detail_rows.append({
+                "日期": date_str,
+                "流水号": order_id,
+                "商品原价": order_orig_total,
+                "实收金额": order_actual_total,
+                "折让金额": round(order_orig_total - order_actual_total, 2),
+                "利润": order_profit_total,
+                "支付方式": pay_method,
+                "商品数量": num_items,
+                "商品名称": "混合商品",
+                "来源": source,
+            })
+
+            if pay_method == "储值卡支付":
+                day_card_spend_total += order_actual_total
+
+        # 3. 报损数据生成
+        num_loss_items = random.randint(2, 6)
+        for _ in range(num_loss_items):
+            p_name, p_cat, _, p_price, _ = random.choice(PRODUCTS[:10])
+            loss_qty = random.randint(1, 4)
+            loss_reason = random.choices(LOSS_REASONS, weights=LOSS_WEIGHTS)[0]
+            loss_amt = round(p_price * loss_qty, 2)
+            loss_audit_time = f"{date_str} 21:{random.randint(10,50):02d}:00"
+
+            loss_rows.append({
+                "审核时间": loss_audit_time,
+                "调整日期": date_str,
+                "商品名称": p_name,
+                "商品分类": p_cat,
+                "报废数量": loss_qty,
+                "报损金额": loss_amt,
+                "金额": loss_amt,
+                "报损原因": loss_reason,
+                "备注": f"{loss_reason}盘点报废",
+            })
+
+        # 4. 储值卡充值
+        recharge_tx_count = random.randint(2, 8)
+        for _ in range(recharge_tx_count):
+            rech_amt = random.choice([100.0, 200.0, 300.0, 500.0, 1000.0])
+            gift_amt = round(rech_amt * 0.1, 2) if rech_amt >= 200 else 0.0
+            day_recharge_total += rech_amt
+            cum_member_balance += (rech_amt + gift_amt)
+            rech_time = f"{date_str} {random.randint(9, 20):02d}:{random.randint(0, 59):02d}:00"
+            pay_m = random.choice(["微信支付", "支付宝", "现金"])
+
+            cards_detail_rows.append({
+                "充值时间": rech_time,
+                "日期": date_str,
+                "会员卡号": f"VIP{random.randint(10000, 99999)}",
+                "当前剩余金额": round(cum_member_balance, 2),
+                "充值金额": rech_amt,
+                "赠送金额": gift_amt,
+                "支付方式": pay_m,
+                "充值门店": "旗舰店",
+            })
+
+        cum_member_balance -= day_card_spend_total
+        cards_rows.append({
+            "日期": date_str,
+            "充值总金额": round(day_recharge_total, 2),
+            "储值卡消费总金额": round(day_card_spend_total, 2),
+            "本金消费金额": round(day_card_spend_total * 0.85, 2),
+            "赠送消费金额": round(day_card_spend_total * 0.15, 2),
+        })
+
+    # 5. 财务参数
+    financial_rows = [{
+        "日期": f"{year}-{month:02d}-01",
+        "固定支出": 850.0,
+        "原料成本比": 0.35,
+        "运营管理比": 0.12,
+    }]
+
+    # 6. 会员总表
+    member_card_rows = [{
+        "0": f"会员总数：{1200 + month * 45}",
+        "1": f"卡内总余额：{round(cum_member_balance, 2)}（本金：{round(cum_member_balance * 0.82, 2)} 赠送：{round(cum_member_balance * 0.18, 2)}）",
+    }]
+
+    # 7. 开业成本
+    openning_cost_rows = [
+        {"开店项目": "店铺硬装与隔断工程", "类别": "装修工程", "金额": 185000.0, "备注": "含水电暖与消防工程"},
+        {"开店项目": "欧洲进口层炉与发酵箱", "类别": "硬件设备", "金额": 128000.0, "备注": "专业烘焙设备"},
+        {"开店项目": "风冷蛋糕展示柜与冷库", "类别": "硬件设备", "金额": 56000.0, "备注": "保鲜与后厨冷链"},
+        {"开店项目": "意式双头咖啡机与磨豆机", "类别": "硬件设备", "金额": 38000.0, "备注": "水吧配套"},
+        {"开店项目": "初次原料物料备货", "类别": "原材料", "金额": 45000.0, "备注": "进口面粉/黄油/包材"},
+        {"开店项目": "智能收银与安防监控系统", "类别": "IT与软件", "金额": 18000.0, "备注": "POS与多路高清"},
+        {"开店项目": "店面物业押金与首期租金", "类别": "运营资产", "金额": 90000.0, "备注": "押二付一"},
+        {"开店项目": "VI品牌设计与开业推广", "类别": "运营资产", "金额": 25000.0, "备注": "开业营销与耗材"},
+    ]
+
+    if os.path.exists(db_path):
+        os.remove(db_path)
+
+    conn = sqlite3.connect(db_path)
+    pd.DataFrame(sales_rows).to_sql("sales", conn, index=False)
+    pd.DataFrame(loss_rows).to_sql("loss", conn, index=False)
+    pd.DataFrame(cards_rows).to_sql("cards", conn, index=False)
+    pd.DataFrame(cards_detail_rows).to_sql("cards_detail", conn, index=False)
+    pd.DataFrame(sales_detail_rows).to_sql("sales_detail", conn, index=False)
+    pd.DataFrame(financial_rows).to_sql("financial", conn, index=False)
+    pd.DataFrame(weather_rows).to_sql("weather", conn, index=False)
+    pd.DataFrame(member_card_rows).to_sql("member_card", conn, index=False)
+    pd.DataFrame(openning_cost_rows).to_sql("openning_cost", conn, index=False)
+    conn.close()
 
 
-def generate_static_files() -> None:
-    """Generate CSV helper files: financial params, member summary."""
-    # Financial parameters
-    fp = pd.DataFrame([{"fixed_cost": 1500.0, "cogs_ratio": 0.35, "op_cost_ratio": 0.12}])
-    fp.to_csv(os.path.join(DB_DIR, "financial_params.csv"), index=False)
+def generate_all_mock_databases():
+    """生成从 2024-09 到 2026-08 的连续月度示例数据库"""
+    print(f"正在生成合成数据库至: {DB_DIR}")
+    
+    months_to_generate = [
+        (2024, 9), (2024, 10), (2024, 11), (2024, 12),
+        (2025, 1), (2025, 2), (2025, 3), (2025, 4),
+        (2025, 5), (2025, 6), (2025, 7), (2025, 8),
+        (2025, 9), (2025, 10), (2025, 11), (2025, 12),
+        (2026, 1), (2026, 2), (2026, 3), (2026, 4),
+        (2026, 5), (2026, 6), (2026, 7), (2026, 8),
+    ]
 
-    # Member summary (all-time totals)
-    ms = pd.DataFrame([{
-        "member_count": random.randint(500, 2000),
-        "total_balance": random.uniform(50000, 200000),
-        "principal":     random.uniform(40000, 160000),
-        "gift_balance":  random.uniform(5000, 40000),
-    }])
-    ms.to_csv(os.path.join(DB_DIR, "member_summary.csv"), index=False)
+    for y, m in months_to_generate:
+        filename = f"business_data_{y}{m:02d}.db"
+        db_path = os.path.join(DB_DIR, filename)
+        generate_month_database(y, m, db_path)
+        print(f"  ✓ 已生成: {filename}")
 
-    print("✅ Generated financial_params.csv and member_summary.csv")
+    # 同时生成一份通用的固定成本 CSV
+    csv_path = os.path.join(DB_DIR, "固定成本.csv")
+    with open(csv_path, "w", encoding="utf-8") as f:
+        f.write("项目,月度金额,日均金额,备注\n")
+        f.write("房租物业,15000,500,商铺核心地段月租\n")
+        f.write("员工薪资,8000,266.67,后厨与前厅薪资分摊\n")
+        f.write("水电杂费,2500,83.33,高功率烘焙用电与水费\n")
+
+    print("✅ 全部示例合成数据库已成功生成！")
 
 
 if __name__ == "__main__":
-    import sys
-    from datetime import date as _date
-
-    today = _date.today()
-
-    # Generate last 3 months
-    for delta in [2, 1, 0]:
-        m = today.month - delta
-        y = today.year
-        if m <= 0:
-            m += 12
-            y -= 1
-        generate_month(y, m)
-
-    generate_static_files()
-    print("\n🎉 Mock data generation complete!")
-    print(f"   Database files: {DB_DIR}")
+    generate_all_mock_databases()

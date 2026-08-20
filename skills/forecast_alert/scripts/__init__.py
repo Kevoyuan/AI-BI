@@ -1,1 +1,0 @@
-# Forecast alert scripts
