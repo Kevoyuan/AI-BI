@@ -34,7 +34,7 @@
 ## 🏗️ 全系统架构总览 (System Architecture)
 
 <p align="center">
-  <img src="docs/images/system_architecture.jpg" alt="AI-BI 系统架构总览" width="100%" />
+  <img src="docs/images/system_architecture.svg" alt="AI-BI 系统架构总览" width="100%" />
 </p>
 
 <details>
