@@ -6,22 +6,22 @@
 [![LangGraph](https://img.shields.io/badge/Agent-LangGraph%20ReAct-orange.svg)](https://github.com/langchain-ai/langgraph)
 [![ECharts](https://img.shields.io/badge/Visualization-ECharts%205-AA344D.svg)](https://echarts.apache.org/)
 
-**AI-BI** is the sanitized public portfolio version of a privately deployed retail analytics system originally built for real bakery operations. It combines a web dashboard with a **LangGraph ReAct agent** that can inspect business context, call deterministic analytical tools when more data is needed, and return both natural-language explanations and structured visual artifacts.
+**AI-BI** is the sanitized public portfolio version of a privately deployed retail analytics system originally built for real bakery operations. It combines a business dashboard with a **LangGraph ReAct agent** that can inspect the current business context, call deterministic analytical tools when more data is needed, and return both natural-language explanations and structured visual artifacts.
 
-The public version preserves the core engineering patterns of the original system — POS data ingestion, dashboard aggregation, LangGraph orchestration, tool-grounded analytics, caching, fallback handling, and streamed AI responses — while removing or replacing private credentials, store-specific identifiers, sensitive business data, and deployment-specific configuration.
+The public repository preserves the core engineering patterns of the private system — POS data ingestion, dashboard aggregation, LangGraph orchestration, tool-grounded analytics, caching, fallback handling, and streamed AI responses — while removing or replacing private credentials, store-specific identifiers, sensitive business data, and deployment-specific configuration.
 
-The project follows a simple design principle: **use the LLM for reasoning and tool selection, but keep business calculations inside explicit, testable Python functions.**
+The main design principle is simple: **use the LLM for reasoning and tool selection, but keep business calculations inside explicit, testable Python functions.**
 
-> **Sanitized public version**
+> **Project origin and sanitization**
 >
-> This repository is intended to make the architecture inspectable and reproducible without exposing the private operational dataset. Live POS credentials and customer-identifying information are not required for the local demo: the data layer can fall back to bundled prewarmed data and synthetic SQLite datasets. The AI assistant itself requires an OpenAI-compatible model API key (DeepSeek is configured by default).
+> This repository is derived from a private operational system. The public version is intended to make the architecture inspectable and reproducible without exposing the underlying business data. It can run without live POS credentials by falling back to sanitized prewarmed data and synthetic SQLite datasets. The AI assistant requires an OpenAI-compatible model API key; DeepSeek is configured by default.
 
-### What was changed for the public repository?
+### What changed in the public version?
 
 - Removed real credentials, customer-identifying information, and store-specific private data.
 - Replaced private operational datasets with sanitized prewarmed data and synthetic SQLite demo datasets.
 - Generalized location-, finance-, and environment-specific configuration where appropriate.
-- Preserved the core dashboard, agent orchestration, analytical tools, caching, and POS integration architecture.
+- Preserved the core dashboard, LangGraph orchestration, analytical tools, caching, and POS integration architecture.
 - Added public-facing documentation, reproducible setup instructions, and demo-friendly fallback paths.
 
 ---
@@ -35,7 +35,7 @@ The project follows a simple design principle: **use the LLM for reasoning and t
 - **Structured AI outputs** including ECharts charts, KPI cards, comparison cards, checklists, alerts, and tables.
 - **Resilient data access** through memory, local Parquet cache, prewarmed offline data, and synthetic SQLite fallback.
 - **Automated tests** covering agent routing, analytical tools, cache behavior, backend endpoints, and frontend rendering.
-- **Production-derived architecture** adapted from a privately deployed retail workflow into a reproducible public showcase.
+- **Production-derived architecture** adapted from an operational retail workflow into a reproducible public showcase.
 
 ---
 
@@ -124,15 +124,15 @@ The agent receives a compressed snapshot of the dashboard as context. It can ans
 "Based on that, what should I remove from the menu?"
 ```
 
-The conversation state is kept separately from the business-data retrieval logic, which makes the tool layer easier to test and reason about.
+The conversation state is kept separately from business-data retrieval logic, which makes the tool layer easier to test and reason about.
 
 ### Why tools instead of generated Python?
 
-Earlier analytics prototypes often let an LLM write arbitrary analysis code. AI-BI takes the opposite approach: the model chooses from explicit, parameterized tools, while calculations remain deterministic Python functions.
+AI-BI lets the model choose from explicit, parameterized tools while business calculations remain deterministic Python functions.
 
 This gives three practical advantages:
 
-1. **Reproducibility** — the same tool parameters produce the same calculation path.
+1. **Reproducibility** — the same tool parameters follow the same calculation path.
 2. **Safer execution** — the model does not execute arbitrary generated Python.
 3. **Testability** — business calculations can be unit-tested independently of the LLM.
 
@@ -179,8 +179,6 @@ Example:
 ```
 ````
 
-This keeps the conversational interface useful for business analysis without forcing every answer into prose.
-
 ---
 
 ## Streaming responses with SSE
@@ -205,7 +203,7 @@ SSE endpoint
 Browser renders the answer incrementally
 ```
 
-SSE is used here because the communication is primarily server-to-browser during generation and does not require a bidirectional WebSocket connection.
+SSE is used because the communication during generation is primarily server-to-browser and does not require a bidirectional WebSocket connection.
 
 ---
 
@@ -223,7 +221,7 @@ L3  Bundled prewarmed sanitized datasets
 L4  Synthetic SQLite datasets
 ```
 
-The underlying live-data path is retained from the operational architecture and includes configurable cache TTLs and quota protection so repeated dashboard requests do not unnecessarily hit the external POS source.
+The live-data path is retained from the operational architecture and includes configurable cache TTLs and quota protection so repeated dashboard requests do not unnecessarily hit the external POS source.
 
 Open-Meteo is used for weather data and does not require an API key.
 
@@ -299,7 +297,7 @@ node --test tests/*.test.mjs
 node tests/dashboard_render.mjs
 ```
 
-The README intentionally avoids hard-coding a test-count badge so the documentation does not become stale as the suite grows.
+The README intentionally avoids a hard-coded test-count badge so the documentation does not become stale as the suite grows.
 
 ---
 
@@ -338,7 +336,7 @@ AI-BI/
 
 ## Public showcase scope and limitations
 
-AI-BI is the **public, sanitized representation of a privately deployed operational system**. The distinction matters: the repository demonstrates the real architecture and workflow patterns, but the included datasets, configuration, and runtime environment have been adapted for safe public inspection and reproducibility.
+AI-BI is the **public, sanitized representation of a privately deployed operational system**. The repository demonstrates the real architecture and workflow patterns, but its datasets, configuration, and runtime environment have been adapted for safe public inspection and reproducibility.
 
 Current boundaries of the public version:
 
@@ -346,6 +344,6 @@ Current boundaries of the public version:
 - `MemorySaver` provides in-process conversational state in this public implementation; it is not a distributed persistence layer.
 - The local server uses Python's `ThreadingHTTPServer`; it is intentionally lightweight rather than a full production web framework.
 - Synthetic and prewarmed datasets reproduce the data shape and workflow without exposing the private operational dataset.
-- Production deployment concerns such as organization-wide authorization, distributed state, centralized observability, and horizontal scaling are outside the scope of this public showcase.
+- Organization-wide authorization, distributed state, centralized observability, and horizontal scaling are outside the scope of this public showcase.
 
-The repository therefore focuses on the parts that are most useful to inspect publicly: **agent orchestration, grounded analytics, retail data workflows, reliability mechanisms, caching/fallback design, and an end-to-end user-facing AI experience**.
+The public repository therefore focuses on the parts that are useful to inspect directly: **agent orchestration, grounded analytics, retail data workflows, reliability mechanisms, caching/fallback design, and an end-to-end user-facing AI experience**.
