@@ -6,13 +6,23 @@
 [![LangGraph](https://img.shields.io/badge/Agent-LangGraph%20ReAct-orange.svg)](https://github.com/langchain-ai/langgraph)
 [![ECharts](https://img.shields.io/badge/Visualization-ECharts%205-AA344D.svg)](https://echarts.apache.org/)
 
-**AI-BI** is a conversational business-intelligence application for retail, bakery, and small-chain operations. It combines a web dashboard with a **LangGraph ReAct agent** that can inspect the current business context, call deterministic analytical tools when more data is needed, and return both natural-language explanations and structured visual artifacts.
+**AI-BI** is the sanitized public portfolio version of a privately deployed retail analytics system originally built for real bakery operations. It combines a web dashboard with a **LangGraph ReAct agent** that can inspect business context, call deterministic analytical tools when more data is needed, and return both natural-language explanations and structured visual artifacts.
 
-The project is designed around a simple idea: **use the LLM for reasoning and tool selection, but keep business calculations inside explicit, testable Python functions.**
+The public version preserves the core engineering patterns of the original system — POS data ingestion, dashboard aggregation, LangGraph orchestration, tool-grounded analytics, caching, fallback handling, and streamed AI responses — while removing or replacing private credentials, store-specific identifiers, sensitive business data, and deployment-specific configuration.
 
-> **Portfolio / demo note**
+The project follows a simple design principle: **use the LLM for reasoning and tool selection, but keep business calculations inside explicit, testable Python functions.**
+
+> **Sanitized public version**
 >
-> The public repository is a sanitized showcase. Live POS credentials and customer-identifying data are not required for the local demo: the data layer can fall back to bundled prewarmed data and synthetic SQLite datasets. The AI assistant itself requires an OpenAI-compatible model API key (DeepSeek is configured by default).
+> This repository is intended to make the architecture inspectable and reproducible without exposing the private operational dataset. Live POS credentials and customer-identifying information are not required for the local demo: the data layer can fall back to bundled prewarmed data and synthetic SQLite datasets. The AI assistant itself requires an OpenAI-compatible model API key (DeepSeek is configured by default).
+
+### What was changed for the public repository?
+
+- Removed real credentials, customer-identifying information, and store-specific private data.
+- Replaced private operational datasets with sanitized prewarmed data and synthetic SQLite demo datasets.
+- Generalized location-, finance-, and environment-specific configuration where appropriate.
+- Preserved the core dashboard, agent orchestration, analytical tools, caching, and POS integration architecture.
+- Added public-facing documentation, reproducible setup instructions, and demo-friendly fallback paths.
 
 ---
 
@@ -25,6 +35,7 @@ The project is designed around a simple idea: **use the LLM for reasoning and to
 - **Structured AI outputs** including ECharts charts, KPI cards, comparison cards, checklists, alerts, and tables.
 - **Resilient data access** through memory, local Parquet cache, prewarmed offline data, and synthetic SQLite fallback.
 - **Automated tests** covering agent routing, analytical tools, cache behavior, backend endpoints, and frontend rendering.
+- **Production-derived architecture** adapted from a privately deployed retail workflow into a reproducible public showcase.
 
 ---
 
@@ -200,7 +211,7 @@ SSE is used here because the communication is primarily server-to-browser during
 
 ## Data resilience and demo mode
 
-The dashboard can operate without live POS credentials by moving through a fallback chain:
+The public version can operate without live POS credentials by moving through a fallback chain:
 
 ```text
 L1  In-memory runtime cache
@@ -212,7 +223,7 @@ L3  Bundled prewarmed sanitized datasets
 L4  Synthetic SQLite datasets
 ```
 
-The live-data path also includes configurable cache TTLs and quota protection so repeated dashboard requests do not unnecessarily hit the external POS source.
+The underlying live-data path is retained from the operational architecture and includes configurable cache TTLs and quota protection so repeated dashboard requests do not unnecessarily hit the external POS source.
 
 Open-Meteo is used for weather data and does not require an API key.
 
@@ -325,16 +336,16 @@ AI-BI/
 
 ---
 
-## Design scope and limitations
+## Public showcase scope and limitations
 
-AI-BI is a portfolio-oriented applied AI system, not a general-purpose autonomous business operator.
+AI-BI is the **public, sanitized representation of a privately deployed operational system**. The distinction matters: the repository demonstrates the real architecture and workflow patterns, but the included datasets, configuration, and runtime environment have been adapted for safe public inspection and reproducibility.
 
-Current boundaries:
+Current boundaries of the public version:
 
 - The agent selects from a constrained set of domain tools rather than creating arbitrary analyses at runtime.
-- `MemorySaver` provides in-process conversational state; it is not a distributed production persistence layer.
+- `MemorySaver` provides in-process conversational state in this public implementation; it is not a distributed persistence layer.
 - The local server uses Python's `ThreadingHTTPServer`; it is intentionally lightweight rather than a full production web framework.
-- Synthetic and prewarmed datasets are included for reproducibility, but they do not represent a live production workload.
-- Production concerns such as multi-user authorization, distributed state, centralized observability, and horizontal scaling would require additional infrastructure.
+- Synthetic and prewarmed datasets reproduce the data shape and workflow without exposing the private operational dataset.
+- Production deployment concerns such as organization-wide authorization, distributed state, centralized observability, and horizontal scaling are outside the scope of this public showcase.
 
-These constraints are deliberate: the repository focuses on **agent orchestration, grounded analytics, reliability mechanisms, and an end-to-end user-facing AI workflow** while remaining easy to inspect and run locally.
+The repository therefore focuses on the parts that are most useful to inspect publicly: **agent orchestration, grounded analytics, retail data workflows, reliability mechanisms, caching/fallback design, and an end-to-end user-facing AI experience**.
