@@ -1,354 +1,349 @@
-# AI-BI — 智能商业分析与多智能体决策平台
-### Conversational Business Intelligence & LangGraph Multi-Agent Analytics Platform
+# AI-BI — 基于 LangGraph 的对话式零售分析平台
 
 [English](README.md) | [简体中文](README_zh.md)
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/)
-[![FastAPI/HTTP](https://img.shields.io/badge/Backend-HTTP%20%2F%20FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
+[![LangGraph](https://img.shields.io/badge/Agent-LangGraph%20ReAct-orange.svg)](https://github.com/langchain-ai/langgraph)
 [![ECharts](https://img.shields.io/badge/Visualization-ECharts%205-AA344D.svg)](https://echarts.apache.org/)
-[![LangGraph](https://img.shields.io/badge/Multi--Agent-LangGraph%20ReAct-orange.svg)](https://github.com/langchain-ai/langgraph)
-[![Tests](https://img.shields.io/badge/Tests-59%20Passed%20(100%25)-brightgreen.svg)](tests/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**AI-BI** 是一个面向现代零售与连锁餐饮场景的**企业级端到端商业智能（BI）与大模型多智能体（Multi-Agent）决策系统**。系统融合了**纯原生精美 Web Dashboard（Vanilla JS + ECharts 5）**、**LangGraph ReAct 状态机 AI 经营助手**、**6 大零售经营深度分析 Skills**、**富工件 (Artifacts) 原生卡片渲染**、以及 **4 级多层缓存与配额防穿透机制**，为门店提供毫秒级指标聚合、经营诊断与自动化策略建议。
+**AI-BI** 是一个私有零售经营分析系统的**公开脱敏作品集版本**。原系统最初面向真实烘焙门店经营场景开发并实际部署使用；公开版保留了核心工程架构，包括 POS 数据接入、Dashboard 指标聚合、LangGraph 编排、参数化分析工具、缓存与降级机制，以及 AI 流式响应。
 
-> 🔒 **数据脱敏与开箱即用说明**：
-> 本仓库为企业实战商业系统的架构重塑与开源展示版本，已全面剔除私有商业凭据与客户 PII 隐私信息（手机号掩码、会员姓名模糊化、收银员/门店匿名化）。内置高保真全量合成数据生成器与脱敏离线预热包，**克隆后无需真实收银机账号即可一键启动完整体验全部功能**。
+AI-BI 将业务看板与 **LangGraph ReAct Agent** 结合：Agent 可以读取当前经营上下文，在需要更多数据或专项分析时自主调用确定性的 Python 工具，并输出自然语言解释、图表、KPI 卡片、行动清单等结构化结果。
+
+核心设计原则很简单：**让 LLM 负责推理与工具选择，把业务计算留在显式、可测试的 Python 函数中。**
+
+> **项目来源与脱敏说明**
+>
+> 本仓库由私有实际运营系统抽取并脱敏而来，目的是在不暴露真实商业数据的前提下，让项目架构可以公开检查和复现。公开版不需要真实 POS 凭据即可运行，因为数据层可以自动回退到脱敏预热数据和合成 SQLite 数据集。AI 助手本身需要一个 OpenAI-compatible 模型 API Key，默认配置为 DeepSeek。
+
+### 公开版做了哪些改动？
+
+- 删除真实账号凭据、客户识别信息和门店私有数据。
+- 将私有运营数据替换为脱敏预热数据和合成 SQLite Demo 数据。
+- 对门店位置、财务参数和部署环境等配置做了泛化处理。
+- 保留原系统核心 Dashboard、LangGraph 编排、分析工具、缓存和 POS 接入架构。
+- 增加公开说明、可复现安装步骤和无需真实业务数据的 Demo fallback 路径。
 
 ---
 
-## 🌟 核心工程与技术亮点 (Engineering Highlights)
+## 这个项目展示了什么？
 
-| 核心维度 | 关键技术实现 | 业务与工程价值 |
+- **Agentic AI 编排**：使用 LangGraph `StateGraph`、`ToolNode`、`tools_condition` 和 `MemorySaver`。
+- **Tool-grounded analytics**：LLM 不直接生成任意计算代码，而是调用明确、可测试的业务分析工具。
+- **零售领域分析能力**：销售预测、天气影响、购物篮分析、分时销售模式、商品 ABC、储值健康度。
+- **流式 AI 交互**：通过 Server-Sent Events（SSE）将生成中的回答持续推送到浏览器。
+- **结构化 AI 输出**：支持 ECharts 图表、KPI 卡片、方案对比、行动清单、预警和表格。
+- **弹性数据访问**：内存缓存、Parquet 缓存、脱敏预热数据和合成 SQLite fallback。
+- **自动化测试**：覆盖 Agent 路由、分析工具、缓存行为、后端接口和前端渲染。
+- **源自真实运营系统的架构**：将私有零售经营流程中的核心架构安全地抽取为可公开复现的 Showcase。
+
+---
+
+## 系统概览
+
+<p align="center">
+  <img src="docs/images/system_architecture.png" alt="AI-BI 系统架构" width="100%" />
+</p>
+
+```text
+浏览器 Dashboard
+  ├── GET /api/dashboard
+  └── POST /api/ai/chat (SSE)
+             │
+             ▼
+Python HTTP Server
+  ├── Dashboard 指标聚合
+  └── LangGraph ReAct Agent
+          │
+          ├── 当前 Dashboard 上下文
+          ├── fetch_pospal_data(...)
+          └── run_analysis(...)
+                  │
+                  ├── forecast
+                  ├── weather
+                  ├── basket
+                  ├── hourly
+                  ├── abc
+                  └── recharge
+             │
+             ▼
+弹性数据层
+  ├── 内存缓存
+  ├── Parquet 缓存
+  ├── 脱敏预热数据
+  └── 合成 SQLite fallback
+```
+
+### 核心运行路径
+
+| 层级 | 主要文件 | 职责 |
 |---|---|---|
-| **LangGraph 状态机 AI 经营助手** | 基于 `LangGraph StateGraph` + `MemorySaver` 实现 ReAct 循环（Thought → Tool Call → Observation → Answer） | 告别硬编码 Prompt，模型自主决策何时调用数据与分析工具；支持会话持久化 (`thread_id`) 与多轮上下文追踪 |
-| **6 大核心分析 Skills 矩阵** | 深度提炼零售餐饮行业经营模型：销售预测、天气量化、购物篮连带、时段客流、商品 ABC、储值健康度 | 将复杂的业务计算收敛为确定性参数化工具，兼顾高精度的统计指标与大模型的归纳推理能力 |
-| **富工件 (Artifacts) 原生渲染** | 原生 ECharts 交互图表、核心指标卡组 (`metrics`)、方案对比卡 (`compare`)、行动清单 (`checklist`)、预警呼出框 (`callout`) | 摆脱传统单调纯文本聊天，以结构化、高颜值的交互组件输出经营诊断与行动建议 |
-| **全栈现代 BI 架构** | 原生 HTML5 / Vanilla JS / CSS3 独立前端 + Python 高并发轻量服务端 + 双向 SSE 流式推送 | 消除重型前端框架构建包袱，首屏毫秒级冷启动；全中文 Daylight/Dark 现代报刊质感排版 |
-| **4 级多层高可用缓存** | 内存运行时缓存 + Parquet 磁盘持久缓存 + 预热离线包兜底 + SQLite 合成数据兜底 | 6小时防穿透冷却保护收银接口配额；当无真实 POS 凭证或离线时平滑回退，实现零摩擦毫秒级体验 |
-| **天气联动与时段排产策略** | 接入 Open-Meteo 逐日气象 API + 24小时客流潮汐模型 | 自动量化晴天/雨天实收弹性，动态生成早市(07-11)、午后茶歇(11-17)、晚市高峰(17-22)的精准排产与陈列指导 |
-| **工业级测试与质量保障** | 59 个 Pytest 单元/状态机测试 (100% 通过) + 21 个 Node.js 前端富工件与 ECharts 渲染冒烟测试 | 严格把关状态机调度、工具降级、数据流一致性、无 Streamlit 耦合守护与前端渲染质量 |
+| Web UI | `web_dashboard/` | Dashboard、AI 对话抽屉、Artifact 渲染、ECharts 可视化 |
+| HTTP/SSE 服务 | `web_dashboard_server.py` | 静态资源、`/api/dashboard`、`/api/ai/chat`、SSE 流 |
+| Agent 编排 | `modules/ai_assistant.py` | LangGraph State、ReAct 循环、Memory、Tool Calling、流式回答 |
+| 分析工具 | `modules/analysis_tools.py` | 参数化零售分析入口 |
+| BI 聚合 | `modules/dashboard_api.py` | Dashboard 指标与业务数据聚合 |
+| 数据访问 | `modules/pospal_live_data.py`, `modules/pospal_*.py` | POS 接入、缓存、配额保护、离线 fallback |
+| 天气 | `modules/weather_api.py` | Open-Meteo 接入 |
+| 测试 | `tests/` | Python Agent/后端测试与 Node.js 前端回归测试 |
 
 ---
 
-## 🏗️ 全系统架构总览 (System Architecture)
+## LangGraph Agent 设计
 
-<p align="center">
-  <img src="docs/images/system_architecture.png" alt="AI-BI 系统架构总览" width="100%" />
-</p>
+AI 助手使用显式循环图，而不是固定 Prompt Chain：
 
-<details>
-<summary><b>🔍 查看原始 Mermaid 架构图代码</b></summary>
-
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'background': '#ffffff', 'primaryColor': '#EEF2FF', 'primaryTextColor': '#1E293B', 'primaryBorderColor': '#6366F1', 'lineColor': '#475569', 'secondaryColor': '#F0FDF4', 'tertiaryColor': '#FFFFFF', 'edgeLabelBackground':'#ffffff' }}}%%
-flowchart TB
-    classDef client fill:#EFF6FF,stroke:#3B82F6,stroke-width:1.5px,color:#1E3A8A;
-    classDef server fill:#ECFDF5,stroke:#10B981,stroke-width:1.5px,color:#065F46;
-    classDef agent fill:#F5F3FF,stroke:#8B5CF6,stroke-width:1.5px,color:#5B21B6;
-    classDef tool fill:#FFFBEB,stroke:#F59E0B,stroke-width:1.5px,color:#92400E;
-    classDef data fill:#F8FAFC,stroke:#64748B,stroke-width:1.5px,color:#334155;
-
-    subgraph Client[" 🖥️ 前端展示与交互层 (Presentation Layer) "]
-        WebDash["现代 Web Dashboard<br/>(HTML5 / CSS3 / Vanilla JS / ECharts 5)"]:::client
-        AIDrawer["AI 对话工作台 & 富工件渲染器<br/>(web_dashboard/ai.js & ai.css)"]:::client
-    end
-
-    subgraph Server[" ⚡ 服务与 API 聚合层 (Service Layer) "]
-        WebServer["web_dashboard_server.py<br/>(轻量多线程 HTTP + SSE 流式服务)"]:::server
-        DashAPI["modules/dashboard_api.py<br/>(20+ 商业分析维度指标聚合引擎)"]:::server
-    end
-
-    subgraph LangGraphSystem[" 🧠 LangGraph ReAct 状态机智能中枢 "]
-        Memory["LangGraph MemorySaver<br/>(多轮会话状态持久化 Checkpointer)"]:::agent
-        Graph["LangGraph StateGraph 编排引擎<br/>(START ➔ answer ➔ tools_condition ➔ tools ➔ END)"]:::agent
-        
-        subgraph ToolsNode[" 🧰 6 大分析 Skills 工具集 (ToolNode) "]
-            T1["📊 fetch_pospal_data (多期数据拉取)"]:::tool
-            T2["📈 forecast (销售加权与趋势预测)"]:::tool
-            T3["⛅ weather (气象影响量化与预警)"]:::tool
-            T4["🛒 basket (购物篮连带与 Lift 提升度)"]:::tool
-            T5["⏰ hourly (24h客流潮汐与波峰排产)"]:::tool
-            T6["📦 abc (商品 ABC 结构与滞销诊断)"]:::tool
-            T7["💳 recharge (储值健康与真实现金流)"]:::tool
-        end
-    end
-
-    subgraph DataLayer[" 💾 4 级多层弹性数据层 (Data Abstraction Layer) "]
-        L1["L1: 内存运行时缓存 (Memory Cache)"]:::data
-        L2["L2: 本地 Parquet 磁盘缓存 (.cache/pospal-months/)"]:::data
-        L3["L3: 脱敏离线预热包 (prewarmed_cache/)"]:::data
-        L4["L4: SQLite 合成数据库 (database/*.db)"]:::data
-        OpenMeteo["Open-Meteo 免费气象接口 (modules/weather_api.py)"]:::data
-    end
-
-    WebDash -->|"GET /api/dashboard"| WebServer
-    AIDrawer -->|"POST /api/ai/chat (SSE)"| WebServer
-    WebServer --> DashAPI
-    WebServer --> Graph
-    Graph <--> Memory
-    Graph --> ToolsNode
-    ToolsNode --> DataLayer
-    DashAPI --> DataLayer
-    DashAPI --> OpenMeteo
+```text
+START
+  │
+  ▼
+answer node
+  │
+  ├── 无需工具 ───────────────────► END
+  │
+  └── Tool Call
+        │
+        ▼
+     ToolNode
+        │
+        ▼
+   Observation
+        │
+        └──────────────────────────► answer node
 ```
 
-</details>
+Agent 会先接收压缩后的 Dashboard 经营快照。如果当前上下文已经足够回答，就直接生成结果；如果用户询问其他时间范围或需要更深入的专项分析，则调用对应工具。
+
+### 状态与会话记忆
+
+`MemorySaver` 通过 `thread_id` 管理会话，可支持类似这样的多轮问题：
+
+```text
+“上个月哪些商品表现比较弱？”
+“那周末呢？”
+“基于这个结果，哪些商品可以考虑下架？”
+```
+
+会话状态与业务数据检索逻辑分离，使 Tool Layer 更容易测试，也更容易定位问题。
+
+### 为什么使用参数化工具，而不是让 LLM 直接生成 Python？
+
+AI-BI 让模型从明确的工具集合中进行选择，而具体业务计算仍由确定性的 Python 函数执行。
+
+这样有三个直接好处：
+
+1. **可复现**：相同工具参数沿用相同的计算路径。
+2. **更安全**：模型不会直接执行任意生成的 Python 代码。
+3. **可测试**：业务计算可以独立于 LLM 做单元测试。
 
 ---
 
-## 🤖 LangGraph 状态机深度架构 (LangGraph StateGraph Architecture)
+## 六类零售分析能力
 
-AI 经营助手完全基于 **LangGraph StateGraph** 构建，采用 **ReAct 循环（Thought → Tool Call → Observation → Answer）**，实现了从意图理解、工具调度、会话记忆到流式工件输出的完整闭环。
+| 能力 | 示例调用 | 输出 |
+|---|---|---|
+| **销售预测** | `run_analysis(analysis="forecast", horizon="tomorrow")` | 基于近期历史的短期销售预测与置信区间 |
+| **天气影响** | `run_analysis(analysis="weather")` | 历史天气与销售关系及相关经营信号 |
+| **购物篮分析** | `run_analysis(analysis="basket", target_product="...")` | 共购商品、连带率、多件单占比、Lift |
+| **分时销售模式** | `run_analysis(analysis="hourly")` | 各小时营收、订单量、客单价及早中晚高峰 |
+| **商品 ABC** | `run_analysis(analysis="abc")` | 基于收入贡献的 A/B/C 分类及滞销候选商品 |
+| **储值健康度** | `run_analysis(analysis="recharge")` | 新增充值、储值消费及现金流相关指标 |
 
-### 1. 状态机拓扑与执行流图
-
-<p align="center">
-  <img src="docs/images/langgraph_topology.png" alt="AI-BI LangGraph ReAct 状态机拓扑图" width="100%" />
-</p>
-
-<details>
-<summary><b>🔍 查看原始 Mermaid 状态机代码</b></summary>
-
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'background': '#ffffff', 'primaryColor': '#EEF2FF', 'primaryTextColor': '#1E293B', 'primaryBorderColor': '#4F46E5', 'lineColor': '#475569', 'secondaryColor': '#FFFBEB', 'tertiaryColor': '#FFFFFF', 'edgeLabelBackground':'#ffffff' }}}%%
-flowchart TD
-    classDef startEnd fill:#D1FAE5,stroke:#059669,stroke-width:2px,color:#065F46,font-weight:bold;
-    classDef nodeBox fill:#EEF2FF,stroke:#4F46E5,stroke-width:2px,color:#312E81,font-weight:bold;
-    classDef toolBox fill:#FEF3C7,stroke:#D97706,stroke-width:2px,color:#78350F,font-weight:bold;
-    classDef memoryBox fill:#F5F3FF,stroke:#7C3AED,stroke-width:2px,color:#4C1D95,font-weight:bold;
-    classDef toolItem fill:#FFFFFF,stroke:#F59E0B,stroke-width:1px,color:#92400E;
-
-    subgraph MemoryLayer [" 💾 会话状态持久化 (LangGraph Checkpointer) "]
-        CK["MemorySaver<br/>• 基于 thread_id 隔离会话<br/>• 多轮对话历史自动追加 (add_messages)<br/>• 支持会话状态恢复与审计"]:::memoryBox
-    end
-
-    START(["🚀 START"]):::startEnd --> answerNode["🧠 answer 节点 (_answer_node)<br/>• 动态挂载当前看板 Context 快照<br/>• 注入 6 大 Skill 领域知识与工具定义<br/>• 驱动 DeepSeek / LLM 生成推理决策"]:::nodeBox
-
-    MemoryLayer <-->|读取/写入 State| answerNode
-
-    answerNode --> checkTools{"🔀 tools_condition<br/>(LLM 是否发起 Tool Calls?)"}
-
-    checkTools -- "发起工具调用" --> toolsNode["🛠️ tools 节点 (ToolNode + 异常降级兜底)"]:::toolBox
-
-    subgraph ToolsRegistry [" 🧰 参数化工具集 (TOOLS) "]
-        direction TB
-        T1["📊 fetch_pospal_data(date_spec, scope='digest' / 'chart' / 'full', archive=False)"]:::toolItem
-        T2["📈 run_analysis(analysis='forecast', horizon='tomorrow' / 'next_week')"]:::toolItem
-        T3["⛅ run_analysis(analysis='weather')"]:::toolItem
-        T4["🛒 run_analysis(analysis='basket', target_product=...)"]:::toolItem
-        T5["⏰ run_analysis(analysis='hourly')"]:::toolItem
-        T6["📦 run_analysis(analysis='abc')"]:::toolItem
-        T7["💳 run_analysis(analysis='recharge')"]:::toolItem
-    end
-
-    toolsNode --> ToolsRegistry
-    ToolsRegistry -- "返回结构化 JSON / 异常捕获" --> toolsNode
-    toolsNode -- "返回 ToolMessage" --> answerNode
-
-    checkTools -- "无工具调用 / 完成推理" --> END(["🏁 END<br/>• SSE 逐字推流到客户端<br/>• 原生渲染 ECharts / Metrics / Compare"]):::startEnd
-```
-
-</details>
-
-### 2. 状态机状态契约 (`AgentState`)
-
-```python
-class AgentState(TypedDict):
-    """LangGraph 状态机运行时上下文状态"""
-    messages: Annotated[Sequence[BaseMessage], add_messages]  # 消息历史，自动支持合并与持久化
-    context: str                                             # 当前看板指标压缩快照 (Snapshot)
-    question: str                                            # 用户原始输入问题
-```
-
-### 3. LangGraph 核心工程机制
-
-1. **ReAct 循环驱动**：
-   - 采用标准 LangGraph 拓扑：`START -> answer -> (tools_condition) -> tools -> answer -> ... -> END`；
-   - LLM 自主决定是否调用工具。如果当前看板数据快照足以回答，直接给出答复；若涉及跨期查询或复杂深度分析，则自动触发 `fetch_pospal_data` 或 `run_analysis`。
-2. **会话持久化与隔离 (Checkpointer)**：
-   - 接入 `MemorySaver`，通过前端传递的 `thread_id` 自动管理独立对话线程；
-   - 保障多轮追问（例如：“那上周呢？”、“基于刚才的 ABC 分析给出淘汰方案”）具备准确的上下文感知能力。
-3. **零废话工具行为约束**：
-   - Prompt 级强制约束：模型发起工具调用时**严禁输出任何占位或过渡废话**（如“我来拉取数据...”）；
-   - 工具返回 `ToolMessage` 后，模型立即结合最新事实数据给出完整、详实的深度经营诊断。
-4. **SSE (Server-Sent Events) 双向流式通信**：
-   - 结合 LangGraph 的 `stream_mode="messages"` 机制，服务端逐 Token 推送 `AIMessageChunk`，实现打字机式丝滑体验。
+这些工具刻意比通用 Code Interpreter 更窄。目标不是让 LLM 随意“写分析代码”，而是把可审核、可测试、可复用的业务计算暴露给 Agent。
 
 ---
 
-## 📊 六大核心分析技能矩阵 (Domain Analysis Skills)
+## 结构化 AI 输出
 
-AI-BI 将零售餐饮运营的核心痛点沉淀为 6 大专用分析技能（Fat Skills），既可被 LangGraph AI 助手自动调用，也可独立作为 Python 函数运行：
+AI 助手不仅输出文本。前端会解析结构化 fenced blocks，并渲染为原生 UI 组件。
 
-| 分析技能 | 调用语法示例 | 数据源与计算依据 | 输出成果与决策价值 |
-| :--- | :--- | :--- | :--- |
-| **销售预测** | `run_analysis(analysis="forecast", horizon="tomorrow"\|"next_week")` | 历史同星期销售序列与线性回归 | 预测明天/下周营收与置信区间，指导订货与备料 |
-| **天气量化** | `run_analysis(analysis="weather")` | Open-Meteo 逐日气象 × 历史销售 | 量化晴天基准下雨天影响系数%，提供外卖备货预警 |
-| **购物篮连带** | `run_analysis(analysis="basket", target_product="招牌生吐司")` | 订单流水号 × 商品明细表 | 平均客单连带率、多件单占比、TOP 共购搭配与提升度 (Lift) |
-| **时段客流** | `run_analysis(analysis="hourly")` | 分钟级交易时间戳 | 07:00~22:00 各时段营收/订单/客单价，早中晚波峰排产建议 |
-| **商品 ABC** | `run_analysis(analysis="abc")` | 历史销售额帕累托累积曲线 | A类核心(70%)、B类腰部(20%)、C类长尾(10%)与滞销淘汰候选 |
-| **储值健康** | `run_analysis(analysis="recharge")` | 充值流水表 × 订单支付方式 | 真实现金进账 vs 老储值卡抵扣结构，预警现金流承压风险 |
+目前支持：
 
----
-
-## 🎨 可视化与富工件 (Artifacts) 原生渲染体系
-
-AI 经营助手原生支持在对话流中输出多种精美富工件：
-
-```markdown
-<!-- 1. 交互图表工件 (ECharts 驱动) -->
-```chart
-{"type":"bar","title":"本周各品类实收","labels":["现烤","西点","饮品"],"series":[{"name":"实收","values":[12000,8500,3200]}]}
+```text
+chart       → ECharts 图表
+metrics     → KPI 卡片
+compare     → 方案/前后对比
+checklist   → 行动清单
+callout     → 预警 / 建议块
+Markdown    → 表格和解释文本
 ```
 
-<!-- 2. 核心指标卡组工件 -->
+示例：
+
+````markdown
 ```metrics
-[{"label":"本周实收","value":"¥3.2万","change":"+14.2%","trend":"up","note":"创近四周新高"},{"label":"综合报损率","value":"2.1%","change":"-0.8%","trend":"down","note":"处于安全线内"}]
+[
+  {"label":"Weekly Net Sales","value":"¥32.5K","change":"+14.2%","trend":"up"},
+  {"label":"Loss Ratio","value":"2.1%","change":"-0.8%","trend":"down"}
+]
 ```
-
-<!-- 3. 方案对比卡工件 -->
-```compare
-{"title":"排产优化方案对比","before":{"title":"优化前","points":["早市断货率 18%","晚市滞销损耗 8.5%"]},"after":{"title":"优化后","points":["早市备货提升 30%","晚市损耗降至 2.5%"]}}
-```
-
-<!-- 4. 经营行动清单工件 -->
-```checklist
-[{"task":"下架 C 类末位 3 款滞销蛋糕","priority":"high","done":false},{"task":"上线「吐司+果酱」早餐组合套餐","priority":"medium","done":false}]
-```
-
-<!-- 5. 预警呼出框工件 -->
-```callout
-{"level":"warn","title":"现金流承压预警","text":"本周储值卡抵扣占实收 54%，直接现金进账较低，建议适当控制大额充值赠送比例。"}
-```
-```
+````
 
 ---
 
-## 💡 核心架构决策与权衡 (Architectural Decisions & Trade-Offs)
+## SSE 流式响应
 
-1. **LangGraph 状态机 vs. 线性 Prompt 链 / AgentExecutor**：
-   - *决策*：采用 LangGraph StateGraph 显式状态循环与 MemorySaver checkpointer；
-   - *权衡依据*：商业诊断具备非线性特征（观察结果后决定补充拉取跨期数据或直接总结），LangGraph 原生支持状态持久化与审计，避免传统 Agent 复杂的死循环与失控风险。
-2. **参数化专用工具 (Fat Skills) vs. 开放式代码解释器 (Code Interpreter)**：
-   - *决策*：将业务逻辑收敛为 6 大高内聚的确定性参数化分析工具；
-   - *权衡依据*：杜绝大模型在代码生成时的算式幻觉（如将储值抵扣误算为现金），消除沙箱执行的安全风险，并将端到端响应耗时缩短 4 倍。
-3. **纯原生 Vanilla JS + ECharts vs. 重型前端框架 (React / Vue)**：
-   - *决策*：全看板采用语义化 HTML5、CSS3 变量与原生 JS 构建；
-   - *权衡依据*：首屏冷启动渲染耗时控制在 50ms 以内，免除前端构建与依赖编译包袱，单文件服务端开箱即跑。
-4. **4 级弹性数据层与配额保护机制**：
-   - *决策*：构建「内存 -> Parquet 磁盘 -> 预热离线包 -> 合成 SQLite」4 级回退链；
-   - *权衡依据*：商用收银机 API 存在严格的调用频率与计费配额。多层缓存与 6 小时防穿透冷却确保配额零超支，且离线状态下仍能 100% 演示所有功能。
+`POST /api/ai/chat` 返回 `text/event-stream`。LangGraph 使用 `stream_mode="messages"`，生成的 `AIMessageChunk` 会持续转发给浏览器。
+
+```text
+用户问题
+   │
+   ▼
+LangGraph Agent
+   │
+   ├── 可选 Tool Call
+   │
+   ▼
+AIMessageChunk Stream
+   │
+   ▼
+SSE Endpoint
+   │
+   ▼
+浏览器逐步渲染回答
+```
+
+这里使用 SSE，是因为生成过程中主要需要服务器单向向浏览器推送内容，并不需要 WebSocket 那种双向实时通信。
 
 ---
 
-## 🚀 快速开始 (Quick Start)
+## 数据弹性与 Demo 模式
 
-### 1. 环境准备
+公开版可以在没有真实 POS 凭据的情况下沿以下路径降级运行：
 
-推荐 Python 3.11+。
+```text
+L1  内存运行时缓存
+ ↓
+L2  本地 Parquet 缓存
+ ↓
+L3  脱敏离线预热数据
+ ↓
+L4  合成 SQLite 数据
+```
+
+真实数据链路仍保留了原运营系统中的可配置缓存 TTL 和配额保护逻辑，避免重复 Dashboard 请求不必要地持续访问外部 POS 数据源。
+
+天气数据来自 Open-Meteo，无需 API Key。
+
+---
+
+## 快速开始
+
+### 环境要求
+
+- Python 3.11+
+- 若需要使用 AI 助手，需要 OpenAI-compatible 模型 API Key
+- 公开 Demo 不强制要求 POS 凭据
+
+### 安装
 
 ```bash
-# 1. 克隆项目
 git clone https://github.com/Kevoyuan/AI-BI.git
 cd AI-BI
 
-# 2. 创建并激活虚拟环境
 python3 -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-
-# 3. 安装依赖
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# 4. 配置环境变量 (可选，直接运行亦可使用内置脱敏预热包)
 cp .env.example .env
-# 若需启用 AI 对话，在 .env 中填入 DEEPSEEK_API_KEY 即可
 ```
 
-### 2. 启动现代 Web Dashboard（主应用）
+启用 AI 助手至少需要设置：
+
+```env
+DEEPSEEK_API_KEY=your_api_key_here
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
+```
+
+### 启动
 
 ```bash
 python3 web_dashboard_server.py --host 127.0.0.1 --port 8600
-# 或运行启动脚本：
+```
+
+浏览器打开：
+
+```text
+http://127.0.0.1:8600
+```
+
+Unix-like 环境也可以使用：
+
+```bash
 bash start_dashboard.sh
 ```
 
-👉 打开浏览器访问：**<http://localhost:8600>**
-- ⚡ 毫秒级首屏加载，支持切换「今日 / 昨日 / 本周 / 本月 / 历史归档月 / 自定义日期范围」；
-- 📈 查看经营摘要横幅、核心 KPI、时段排产策略、分类毛利率、时段热力图及天气实收关联；
-- 💬 点击右下角 **AI 助手** 唤起全功能对话工作台，体验基于 LangGraph ReAct 状态机的智能经营诊断与富工件渲染。
-
-### 3. 一键重新生成高保真合成数据 (可选)
+### 可选：重新生成合成 Demo 数据
 
 ```bash
 python3 data/mock/generate_mock_data.py
 ```
-一键生成覆盖 2024~2026 年全部 9 张标准表的脱敏 SQLite 数据库。
 
 ---
 
-## 🧪 自动化测试套件 (Test Suite)
+## 测试
 
-项目配备了严格的自动化测试体系，确保重构与更新的高稳定性：
+Python 测试覆盖 LangGraph Assistant、分析工具、Dashboard API、缓存、POS Adapter 和天气相关逻辑：
 
 ```bash
-# 1. 运行 Python 单元测试与 LangGraph 状态机测试
 PYTHONPATH=. pytest -v
+```
 
-# 2. 运行 Node.js 前端 ECharts 与富工件渲染测试
+前端回归测试使用 Node 内置 Test Runner：
+
+```bash
 node --test tests/*.test.mjs
-
-# 3. 运行完整看板 54 处 DOM 挂载冒烟测试
 node tests/dashboard_render.mjs
 ```
 
-**测试覆盖率概况**：
-- ✅ **59/59 Python 单元与集成测试通过 (100%)**：覆盖 AI Assistant、6 大分析工具、Checkpointer 会话记忆、缓存击穿保护、天气 API 容灾与配额守护；
-- ✅ **21/21 前端 Node.js 测试通过 (100%)**：覆盖 Markdown 表格、Tasklist、GitHub Alert 语法及全部 ECharts 富工件转换；
-- ✅ **54/54 DOM 渲染目标挂载成功 (100%)**。
+README 不再硬编码测试数量 Badge，避免测试集扩展后文档中的数字过时。
 
 ---
 
-## 📂 项目结构规范
+## 仓库结构
 
 ```text
 AI-BI/
-├── web_dashboard/                 # 纯原生精美 Dashboard 前端
-│   ├── index.html                 # 仪表盘骨架与面板结构
-│   ├── styles.css                 # 现代化 Daylight/Dark Editorial 质感样式
-│   ├── app.js                     # 业务数据渲染与 ECharts 交互引擎
-│   ├── ai.js                      # AI 助手对话抽屉与富工件解析器
-│   ├── ai.css                     # 助手抽屉、气泡与富工件卡片样式
-│   ├── ai_chart.js                # 会话内动态 ECharts 解析器
-│   └── vendor/                    # 本地依赖库 (echarts.min.js)
-├── modules/                       # 核心业务逻辑与模型模块 (11个精炼模块)
-│   ├── ai_assistant.py            # LangGraph ReAct 状态机 AI 经营助手
-│   ├── analysis_tools.py          # 6 大分析技能参数化封装与 Tool 调度
-│   ├── dashboard_api.py           # 20+ 维度商业指标聚合计算引擎
-│   ├── pospal_live_data.py        # 4 级多层缓存数据加载器
-│   ├── weather_api.py             # Open-Meteo 免费逐日气象客户端
-│   ├── pospal_quota.py            # API 查询配额守护器
-│   ├── financial.py               # 财务与成本参数计算
-│   ├── database.py                # SQLite 数据库底层工具
-│   ├── pospal_openapi.py          # 银豹 OpenAPI 客户端
-│   ├── pospal_webapi.py           # 银豹 WebAPI 客户端
-│   └── __init__.py
-├── skills/                        # 专项 Fat Skills 体系 (6大分析算法)
-│   ├── deep_analysis/             # 跨表关联、购物篮、时段客流、商品 ABC
-│   ├── profit_cost/               # 盈亏平衡、储值健康度、ROI 测算
-│   ├── daily_report/              # 运营日报与目标达成分析
-│   ├── forecast_alert/            # 销售预测与异常预警
-│   └── visualization/             # 动态可视化与图表构建
-├── prewarmed_cache/               # 脱敏多月份 Parquet 离线预热包
-├── data/mock/                     # 高保真合成数据生成引擎
-├── tests/                         # 自动化测试与质量守护套件 (17个测试文件)
-├── web_dashboard_server.py        # 主 HTTP / API / SSE 流式服务端
-├── start_dashboard.sh             # 快速启动脚本
-└── requirements.txt               # 生产与测试依赖清单
+├── api/
+│   └── index.py                  # 带认证的 Vercel-compatible 入口
+├── data/
+│   └── mock/                     # 合成 Demo 数据生成器
+├── database/                     # 本地 SQLite Demo 数据
+├── docs/
+│   └── images/                   # 架构图与产品图
+├── modules/
+│   ├── ai_assistant.py           # LangGraph ReAct Agent 与流式回答
+│   ├── analysis_tools.py         # 参数化分析工具
+│   ├── dashboard_api.py          # BI 聚合层
+│   ├── pospal_live_data.py       # Live/cache/fallback 数据访问
+│   ├── pospal_openapi.py         # POS OpenAPI 接入
+│   ├── pospal_webapi.py          # POS Web 接入
+│   ├── pospal_quota.py           # 配额保护
+│   ├── database.py               # SQLite Helper
+│   └── weather_api.py            # Open-Meteo 接入
+├── prewarmed_cache/              # 脱敏离线预热数据
+├── skills/                       # 领域分析脚本与参考逻辑
+├── tests/                        # Python + Node.js 测试
+├── web_dashboard/                # HTML/CSS/JS Dashboard 与 Artifact Renderer
+├── web_dashboard_server.py       # HTTP API 与 SSE Server
+├── start_dashboard.sh            # 启动脚本
+├── requirements.txt
+└── .env.example
 ```
 
 ---
 
-## 📄 开源许可证
+## 公开 Showcase 的范围与限制
 
-本项目基于 [MIT License](LICENSE) 开源。
+AI-BI 是一个**私有已部署运营系统的公开脱敏版本**。这一点很重要：公开仓库展示的是实际使用过的核心架构和工作流模式，但其中的数据集、配置以及运行环境已经为公开展示和可复现性进行了调整。
+
+当前公开版边界包括：
+
+- Agent 从受控的领域工具集合中选择，而不是运行时任意生成分析代码。
+- `MemorySaver` 在公开实现中提供进程内会话状态，并不是分布式持久化方案。
+- 本地服务使用 Python `ThreadingHTTPServer`，保持轻量，并非完整生产 Web Framework。
+- 合成数据与预热数据用于复现真实数据形态和工作流，但不会暴露私有运营数据。
+- 组织级权限控制、分布式状态、集中式可观测性和横向扩展不属于这个公开 Showcase 的范围。
+
+因此，这个公开仓库重点展示最适合公开检查的部分：**Agent 编排、Grounded Analytics、零售数据工作流、可靠性机制、缓存/降级设计，以及端到端的用户侧 AI 体验。**
