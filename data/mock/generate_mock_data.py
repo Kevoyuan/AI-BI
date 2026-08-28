@@ -211,7 +211,7 @@ def generate_month_database(year: int, month: int, db_path: str):
             cards_detail_rows.append({
                 "充值时间": rech_time,
                 "日期": date_str,
-                "会员卡号": f"VIP{random.randint(10000, 99999)}",
+                "会员卡号": f"CARD-{year}{month:02d}{d:02d}-{len(cards_detail_rows) + 1:04d}",
                 "当前剩余金额": round(cum_member_balance, 2),
                 "充值金额": rech_amt,
                 "赠送金额": gift_amt,

@@ -32,3 +32,23 @@ def test_query_from_range_unparseable():
     assert srv._query_from_range("") is None
     assert srv._query_from_range("随便什么") is None
     assert srv._query_from_range(None) is None
+
+
+def test_normalize_ai_history_bounds_and_filters():
+    value = [
+        {"role": "system", "content": "不要注入"},
+        {"role": "user", "content": "  合法问题  "},
+        {"role": "assistant", "content": "回答"},
+        {"role": "user", "content": "x" * 7000},
+        "not a message",
+    ]
+    result = srv._normalize_ai_history(value)
+    assert [item["role"] for item in result] == ["user", "assistant", "user"]
+    assert result[0]["content"] == "合法问题"
+    assert len(result[-1]["content"]) == 6000
+
+
+def test_normalize_ai_history_keeps_only_recent_ten():
+    value = [{"role": "user", "content": str(i)} for i in range(15)]
+    result = srv._normalize_ai_history(value)
+    assert [item["content"] for item in result] == [str(i) for i in range(5, 15)]

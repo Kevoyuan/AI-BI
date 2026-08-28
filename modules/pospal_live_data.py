@@ -36,6 +36,7 @@ import pandas as pd
 import data_scrapy
 from modules.pospal_openapi import classify_income, normalize_payment_category
 from modules.pospal_webapi import download_reports_via_webapi
+from modules.privacy import sanitize_live_data
 
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ class LivePospalData:
     cards_detail: pd.DataFrame
     sales_detail: pd.DataFrame
     payments: pd.DataFrame = field(default_factory=pd.DataFrame)
+    source: str = "unknown"
 
 
 # (year, month) -> (cached_at_epoch, LivePospalData, archived_flag).
@@ -110,6 +112,7 @@ def _clone_live(live: LivePospalData) -> LivePospalData:
         cards_detail=live.cards_detail.copy(deep=True),
         sales_detail=live.sales_detail.copy(deep=True),
         payments=live.payments.copy(deep=True),
+        source=getattr(live, "source", "unknown"),
     )
 
 
@@ -124,7 +127,9 @@ def _download_month(year: int, month: int) -> LivePospalData:
             year,
             month,
         )
-        return load_report_directory(Path(tmp_dir))
+        live = load_report_directory(Path(tmp_dir))
+        live.source = "live_api"
+        return live
 
 
 def fetch_live_pospal_data(
@@ -149,6 +154,11 @@ def fetch_live_pospal_data(
 
         if cached is not None:
             cached_at, live, archived = cached
+            # Also protect entries inserted by older processes before the
+            # privacy boundary was introduced.
+            live = sanitize_live_data(live)
+            cached = (cached_at, live, archived)
+            _MONTHLY_CACHE[key] = cached
             age = max(now - cached_at, 0)
             # Archived months are pinned: never expire on normal reads, and
             # even force_refresh cannot bypass the free-quota floor.
@@ -165,7 +175,7 @@ def fetch_live_pospal_data(
                 return _clone_live(live)
 
         try:
-            live = _download_month(year, month)
+            live = sanitize_live_data(_download_month(year, month))
         except Exception:
             if cached is not None:
                 logger.exception(
@@ -219,6 +229,8 @@ def _load_disk_cache(
     if legacy is None:
         return None
     cached_at, live = legacy
+    live = sanitize_live_data(live)
+    live.source = "disk_cache"
     archived = (year, month) in _ARCHIVE_MONTHS
     if _save_disk_cache(year, month, cached_at, live, archived=archived):
         # Only drop the legacy pickle once the parquet copy is safely on disk.
@@ -248,7 +260,16 @@ def _load_parquet_cache(
             frames = {
                 field: pd.read_parquet(path / f"{field}.parquet") for field in _LIVE_FIELDS
             }
-            live = LivePospalData(**frames)
+            live = sanitize_live_data(
+                LivePospalData(
+                    **frames,
+                    source=(
+                        "prewarmed_cache"
+                        if "prewarmed_cache" in str(path)
+                        else "disk_cache"
+                    ),
+                )
+            )
             return float(meta["cached_at"]), live, bool(meta.get("archived", False))
         except Exception:
             logger.warning("忽略无法读取的银豹月报缓存: %s", path, exc_info=True)
@@ -313,6 +334,7 @@ def _save_disk_cache(
     Returns ``True`` on success so callers can decide whether a legacy pickle
     is safe to delete (migration must not destroy the only disk copy).
     """
+    live = sanitize_live_data(live)
     path = _disk_cache_path(year, month)
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = path.with_name(path.name + ".tmp")
@@ -359,7 +381,7 @@ def archive_month(year: int, month: int) -> bool:
             cached = disk_cached
             _MONTHLY_CACHE[key] = disk_cached
         if cached is None:
-            live = _download_month(year, month)
+            live = sanitize_live_data(_download_month(year, month))
             cached_at = now
         else:
             cached_at, live, _archived = cached

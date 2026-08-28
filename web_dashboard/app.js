@@ -14,6 +14,12 @@ const state = {
 // Exposed for the AI assistant module (modules/ai.js) to read the live payload.
 window.DashboardState = state;
 
+const t = (value) => (window.I18n && typeof window.I18n.t === "function" ? window.I18n.t(value) : value);
+
+window.addEventListener("languagechange", () => {
+  if (state.payload) render(state.payload);
+});
+
 const numberFmt = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
 const moneyFmt = new Intl.NumberFormat("zh-CN", {
   style: "currency",
@@ -623,8 +629,8 @@ function showError(message) {
 }
 
 function setStatus(title, copy) {
-  els.statusTitle.textContent = title;
-  els.statusCopy.textContent = copy;
+  els.statusTitle.textContent = t(title);
+  els.statusCopy.textContent = t(copy);
   els.statusCard.classList.toggle("is-loading", title === "正在加载");
   els.statusCard.classList.toggle("is-error", title === "加载失败");
 }
@@ -640,10 +646,10 @@ function render(data) {
   renderExecSummary(data);
   renderKpis(data.kpis);
   renderLegend(els.legendDaily, [
-    ["实收金额", PALETTE.revenue],
-    ["净利润估算", PALETTE.profit],
-    ["损耗价值", PALETTE.loss],
-    ["储值卡充值", PALETTE.card],
+    [t("实收金额"), PALETTE.revenue],
+    [t("净利润估算"), PALETTE.profit],
+    [t("损耗价值"), PALETTE.loss],
+    [t("储值卡充值"), PALETTE.card],
   ]);
   renderMultiLine(els.dailyChart, data.daily, [
     { key: "实收金额", color: PALETTE.revenue },
@@ -671,8 +677,8 @@ function render(data) {
   renderProductBCG(data.topProducts, data.profitByProduct, data.slowMovers, data.productABC);
   renderBars(els.lossList, data.lossReasons, "报损原因", "报损金额", "danger");
   renderLegend(els.legendCard, [
-    ["充值总金额", PALETTE.revenue],
-    ["储值卡消费", PALETTE.card],
+    [t("充值总金额"), PALETTE.revenue],
+    [t("储值卡消费"), PALETTE.card],
   ]);
   renderMultiLine(els.cardChart, data.cards, [
     { key: "充值总金额", color: PALETTE.revenue },
@@ -803,7 +809,7 @@ function renderKpis(kpis) {
   const totalBase = revenue + loss;
   const lossRate = totalBase > 0 ? (loss / totalBase) : 0;
   const lossHealthCls = lossRate > 0.08 ? "loss-danger" : (lossRate > 0.05 ? "loss-warn" : "loss-ok");
-  const lossHealthText = lossRate > 0.08 ? "高损预警" : (lossRate > 0.05 ? "偏高" : "健康");
+  const lossHealthText = lossRate > 0.08 ? t("高损预警") : (lossRate > 0.05 ? t("偏高") : t("健康"));
 
   // Units per transaction
   const topProds = data.topProducts || [];
@@ -818,62 +824,62 @@ function renderKpis(kpis) {
 
   const items = [
     {
-      label: "净利润估算",
+      label: t("净利润估算"),
       value: money(netProfit),
       cls: "kpi-profit",
       suffix: "Net profit",
-      subText: `日均利润 ${money(activeDays > 0 ? netProfit / activeDays : 0)}`,
+      subText: `${t("日均利润")} ${money(activeDays > 0 ? netProfit / activeDays : 0)}`,
       delta: deltas.netProfit,
       hasDelta: true,
       weight: 1,
       tooltip: "净利润估算 = 实收金额 − 商品总价 × 原料成本比 − 固定支出。按日计算后汇总，不扣除运营管理比。",
     },
     {
-      label: "实收金额",
+      label: t("实收金额"),
       value: money(revenue),
       cls: "kpi-revenue",
       suffix: "Revenue",
-      subText: `日均 ${money(avgDailyRevenue)}`,
+      subText: `${t("日均")} ${money(avgDailyRevenue)}`,
       delta: deltas.revenue,
       hasDelta: true,
       weight: 2,
     },
     {
-      label: "订单数",
+      label: t("订单数"),
       value: number(orders),
       cls: "kpi-orders",
       suffix: "Orders",
-      subText: `日均 ${number(Math.round(activeDays > 0 ? orders / activeDays : 0))} 单`,
+      subText: `${t("日均")} ${number(Math.round(activeDays > 0 ? orders / activeDays : 0))} ${t("单")}`,
       delta: deltas.orders,
       hasDelta: true,
       weight: 3,
     },
     {
-      label: "客单价",
+      label: t("客单价"),
       value: decimalFmt.format(avgTicket),
       cls: "kpi-ticket",
       suffix: "Avg ticket",
-      subText: upt > 0 ? `连带 ${upt.toFixed(1)} 件/单 · 件均 ¥${avgItemPrice.toFixed(1)}` : "客均消费",
+      subText: upt > 0 ? `${t("连带")} ${upt.toFixed(1)} ${t("件/单")} · ${t("件均")} ¥${avgItemPrice.toFixed(1)}` : t("客均消费"),
       delta: deltas.avgTicket,
       hasDelta: true,
       weight: 4,
     },
     {
-      label: "综合报损率",
+      label: t("综合报损率"),
       value: percentFmt.format(lossRate),
       cls: `kpi-loss ${lossHealthCls}`,
       suffix: "Loss rate",
-      subText: `报损 ${money(loss)} · ${lossHealthText}`,
+      subText: `${t("报损")} ${money(loss)} · ${lossHealthText}`,
       hasDelta: false,
       weight: 5,
       tooltip: "综合报损率 = 报损金额 ÷ (实收金额 + 报损金额)。行业建议健康线 <5%，5%~8% 为预警，>8% 需排查。",
     },
     {
-      label: "储值充值",
+      label: t("储值充值"),
       value: money(cardRecharge),
       cls: "kpi-card",
       suffix: "Recharge",
-      subText: "会员资金池沉淀",
+      subText: t("会员资金池沉淀"),
       hasDelta: false,
       weight: 6,
     },
@@ -1228,17 +1234,17 @@ function renderHourChart(rows) {
         const ord = params[1]?.value || 0;
         const avg = ord > 0 ? rev / ord : 0;
         return `
-          <div style="font-weight:600;margin-bottom:6px;color:#c89b3c;font-family:'JetBrains Mono',monospace;">${escapeHtml(hour)}:00 时段</div>
+          <div style="font-weight:600;margin-bottom:6px;color:#c89b3c;font-family:'JetBrains Mono',monospace;">${escapeHtml(hour)}:00 ${t("时段")}</div>
           <div style="display:flex;justify-content:space-between;gap:18px;margin:3px 0;font-size:12px;">
-            <span style="color:#a89f91;">营业实收</span>
+            <span style="color:#a89f91;">${t("营业实收")}</span>
             <strong style="color:#f5eee6;font-family:'JetBrains Mono',monospace;">${escapeHtml(money(rev))}</strong>
           </div>
           <div style="display:flex;justify-content:space-between;gap:18px;margin:3px 0;font-size:12px;">
-            <span style="color:#a89f91;">订单笔数</span>
-            <strong style="color:#f5eee6;font-family:'JetBrains Mono',monospace;">${number(ord)} 单</strong>
+            <span style="color:#a89f91;">${t("订单笔数")}</span>
+            <strong style="color:#f5eee6;font-family:'JetBrains Mono',monospace;">${number(ord)} ${t("单")}</strong>
           </div>
           <div style="display:flex;justify-content:space-between;gap:18px;margin:3px 0;font-size:12px;">
-            <span style="color:#a89f91;">平均客单价</span>
+            <span style="color:#a89f91;">${t("平均客单价")}</span>
             <strong style="color:#f5eee6;font-family:'JetBrains Mono',monospace;">${escapeHtml(money(avg))}</strong>
           </div>
         `;
@@ -1261,7 +1267,7 @@ function renderHourChart(rows) {
       {
         type: "value",
         position: "left",
-        name: "实收",
+        name: t("实收"),
         nameTextStyle: { color: "#a89f91", fontSize: 10 },
         axisLine: { show: false },
         splitLine: ECHARTS_THEME.splitLine,
@@ -1273,7 +1279,7 @@ function renderHourChart(rows) {
       {
         type: "value",
         position: "right",
-        name: "单数",
+        name: t("单数"),
         nameTextStyle: { color: "#a89f91", fontSize: 10 },
         axisLine: { show: false },
         splitLine: { show: false },
@@ -1285,7 +1291,7 @@ function renderHourChart(rows) {
     ],
     series: [
       {
-        name: "营业实收",
+        name: t("营业实收"),
         type: "bar",
         yAxisIndex: 0,
         data: revValues,
@@ -1305,7 +1311,7 @@ function renderHourChart(rows) {
         },
       },
       {
-        name: "订单数",
+        name: t("订单数"),
         type: "line",
         yAxisIndex: 1,
         smooth: 0.3,
@@ -1529,11 +1535,11 @@ function renderDonut(target, legend, rows) {
       formatter: (p) => `
         <div style="font-weight:600;margin-bottom:4px;color:#c89b3c;">${escapeHtml(p.name)}</div>
         <div style="display:flex;justify-content:space-between;gap:16px;font-size:12px;">
-          <span style="color:#a89f91;">金额</span>
+            <span style="color:#a89f91;">${t("金额")}</span>
           <strong style="color:#f5eee6;font-family:'JetBrains Mono',monospace;">${escapeHtml(money(p.value))}</strong>
         </div>
         <div style="display:flex;justify-content:space-between;gap:16px;font-size:12px;">
-          <span style="color:#a89f91;">占比</span>
+          <span style="color:#a89f91;">${t("占比")}</span>
           <strong style="color:#f5eee6;font-family:'JetBrains Mono',monospace;">${escapeHtml(percentFmt.format(total > 0 ? p.value / total : 0))}</strong>
         </div>
       `,
@@ -1558,7 +1564,7 @@ function renderDonut(target, legend, rows) {
     },
     series: [
       {
-        name: "来源分布",
+        name: t("来源分布"),
         type: "pie",
         radius: ["58%", "82%"],
         center: ["50%", "50%"],
@@ -1685,12 +1691,12 @@ function renderCumulative(cum) {
     return;
   }
   const items = [
-    { label: "商品总价累计", value: money(cum["商品总价累计"]), cls: "cum-gross" },
-    { label: "实收金额累计", value: money(cum["实收金额累计"]), cls: "cum-rev" },
-    { label: "订单笔数累计", value: number(cum["订单笔数累计"]), cls: "cum-orders" },
-    { label: "损耗价值累计", value: money(cum["损耗价值累计"]), cls: "cum-loss" },
-    { label: "净利润累计", value: money(cum["净利润累计"]), cls: cum["净利润累计"] >= 0 ? "cum-profit-pos" : "cum-profit-neg" },
-    { label: "总净利润率", value: `${(cum["总净利润率"] || 0).toFixed(1)}%`, cls: "cum-margin" },
+    { label: t("商品总价累计"), value: money(cum["商品总价累计"]), cls: "cum-gross" },
+    { label: t("实收金额累计"), value: money(cum["实收金额累计"]), cls: "cum-rev" },
+    { label: t("订单笔数累计"), value: number(cum["订单笔数累计"]), cls: "cum-orders" },
+    { label: t("损耗价值累计"), value: money(cum["损耗价值累计"]), cls: "cum-loss" },
+    { label: t("净利润累计"), value: money(cum["净利润累计"]), cls: cum["净利润累计"] >= 0 ? "cum-profit-pos" : "cum-profit-neg" },
+    { label: t("总净利润率"), value: `${(cum["总净利润率"] || 0).toFixed(1)}%`, cls: "cum-margin" },
   ];
   els.cumulative.innerHTML = items
     .map(
@@ -1736,7 +1742,7 @@ function renderCumulative(cum) {
         return `
           <div style="font-weight:600;margin-bottom:6px;color:#c89b3c;font-family:'JetBrains Mono',monospace;">${escapeHtml(row["日期"] || "")}</div>
           <div style="display:flex;justify-content:space-between;gap:18px;font-size:12px;">
-            <span style="color:#a89f91;">累计净利润</span>
+            <span style="color:#a89f91;">${t("累计净利润")}</span>
             <strong style="color:${color};font-family:'JetBrains Mono',monospace;">${escapeHtml(money(val))}</strong>
           </div>
         `;
@@ -1765,7 +1771,7 @@ function renderCumulative(cum) {
     },
     series: [
       {
-        name: "净利润累计",
+        name: t("净利润累计"),
         type: "line",
         smooth: 0.3,
         showSymbol: series.length <= 31,
@@ -1923,7 +1929,7 @@ function renderOrderHeatmap(rows) {
     </div>
     ${rowsHtml}
     <div class="hm-legend" style="margin-top:8px">
-      <span>少</span><div class="hm-scale"></div><span>多</span>
+          <span>${t("少")}</span><div class="hm-scale"></div><span>${t("多")}</span>
     </div>
   `;
 }
@@ -1934,10 +1940,10 @@ function renderHourPeriod(period) {
     return;
   }
   const items = [
-    { key: "morning", label: "早市", range: "9:30 – 12:00", color: "#c89b3c" },
-    { key: "noon", label: "午市", range: "12:00 – 15:00", color: "#5b8c7b" },
-    { key: "afternoon", label: "下午", range: "15:00 – 18:00", color: "#7a4e7d" },
-    { key: "evening", label: "晚市", range: "18:00 – 24:00", color: "#c44536" },
+    { key: "morning", label: t("早市"), range: "9:30 – 12:00", color: "#c89b3c" },
+    { key: "noon", label: t("午市"), range: "12:00 – 15:00", color: "#5b8c7b" },
+    { key: "afternoon", label: t("下午"), range: "15:00 – 18:00", color: "#7a4e7d" },
+    { key: "evening", label: t("晚市"), range: "18:00 – 24:00", color: "#c44536" },
   ];
   const total = items.reduce((s, it) => s + (period[it.key]?.["订单数"] || 0), 0) || 1;
   const max = Math.max(...items.map((it) => period[it.key]?.["订单数"] || 0), 1);
@@ -1954,7 +1960,7 @@ function renderHourPeriod(period) {
           </div>
           <div class="hp-bar"><div class="hp-fill" style="width:${pct}%; background:${it.color}"></div></div>
           <div class="hp-value">
-            <span class="hp-main">${number(data["订单数"])} 单</span>
+            <span class="hp-main">${number(data["订单数"])} ${t("单")}</span>
             <span class="hp-sub">${escapeHtml(money(data["实收金额"]))} · ${escapeHtml(percentFmt.format(data["占比"]))}</span>
           </div>
         </div>
@@ -1965,9 +1971,9 @@ function renderHourPeriod(period) {
   const peak = period["peak"] || { hour: 0, 订单数: 0 };
   els.hourPeriod.innerHTML = `
     <div class="hp-peak">
-      <span class="hp-peak-label">高峰时段</span>
+      <span class="hp-peak-label">${t("高峰时段")}</span>
       <strong>${peak.hour}:00</strong>
-      <span class="hp-peak-sub">${number(peak["订单数"])} 单</span>
+      <span class="hp-peak-sub">${number(peak["订单数"])} ${t("单")}</span>
     </div>
     <div class="hp-list">${rows}</div>
   `;
@@ -2035,13 +2041,13 @@ function renderTicketChart(rows) {
         if (!params || !params.length) return "";
         const item = data[params[0].dataIndex];
         return `
-          <div style="font-weight:600;margin-bottom:6px;color:#c89b3c;font-family:'JetBrains Mono',monospace;">${item["小时"]}:00 时段</div>
+          <div style="font-weight:600;margin-bottom:6px;color:#c89b3c;font-family:'JetBrains Mono',monospace;">${item["小时"]}:00 ${t("时段")}</div>
           <div style="display:flex;justify-content:space-between;gap:18px;font-size:12px;">
-            <span style="color:#a89f91;">平均客单价</span>
+            <span style="color:#a89f91;">${t("平均客单价")}</span>
             <strong style="color:#f5eee6;font-family:'JetBrains Mono',monospace;">${escapeHtml(money(item["客单价"]))}</strong>
           </div>
           <div style="display:flex;justify-content:space-between;gap:18px;font-size:12px;">
-            <span style="color:#a89f91;">时段订单数</span>
+            <span style="color:#a89f91;">${t("时段订单数")}</span>
             <strong style="color:#f5eee6;font-family:'JetBrains Mono',monospace;">${number(item["订单数"])} 单</strong>
           </div>
         `;
@@ -2070,7 +2076,7 @@ function renderTicketChart(rows) {
     },
     series: [
       {
-        name: "客单价",
+        name: t("客单价"),
         type: "line",
         smooth: 0.35,
         showSymbol: true,

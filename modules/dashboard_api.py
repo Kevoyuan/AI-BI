@@ -90,6 +90,8 @@ def _concat_live_data(parts: list[LivePospalData]) -> LivePospalData:
             return pd.DataFrame()
         return pd.concat(non_empty, ignore_index=True)
 
+    sources = {getattr(part, "source", "unknown") for part in parts}
+    source = sources.pop() if len(sources) == 1 else "mixed_cache"
     return LivePospalData(
         sales=_concat([part.sales for part in parts]),
         loss=_concat([part.loss for part in parts]),
@@ -97,6 +99,7 @@ def _concat_live_data(parts: list[LivePospalData]) -> LivePospalData:
         cards_detail=_concat([part.cards_detail for part in parts]),
         sales_detail=_concat([part.sales_detail for part in parts]),
         payments=_concat([part.payments for part in parts]),
+        source=source,
     )
 
 
@@ -242,6 +245,12 @@ def build_dashboard_payload(
             logging.getLogger("dashboard").warning("builder %s failed: %s", name, exc)
             return default
 
+    source_labels = {
+        "prewarmed_cache": "脱敏预热缓存",
+        "disk_cache": "脱敏本地缓存",
+        "live_api": "银豹后台接口（实时，已脱敏）",
+        "mixed_cache": "脱敏缓存数据",
+    }
     return {
         "meta": {
             "year": query.year,
@@ -250,7 +259,9 @@ def build_dashboard_payload(
             "dateTo": query.date_to,
             "range": query.label(),
             "generatedAt": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "source": "银豹后台接口",
+            "source": source_labels.get(
+                getattr(live, "source", "unknown"), "银豹后台接口"
+            ),
             "weatherSource": weather.provider,
             "weatherStatus": weather.status,
         },

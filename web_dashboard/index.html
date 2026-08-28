@@ -25,6 +25,12 @@
         </div>
       </div>
 
+      <div id="language-toggle" class="language-toggle" role="group" aria-label="Language">
+        <button type="button" data-lang="zh" aria-pressed="true">中</button>
+        <span aria-hidden="true">/</span>
+        <button type="button" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+
       <p class="rail-note">
         数据直连银豹后台接口 · 不写入本地数据库
       </p>
@@ -159,12 +165,21 @@
                   <strong>AI 智能经营顾问</strong>
                 </div>
                 <p id="ai-page-scope" class="ai-wb-scope">基于当前看板经营数据实时分析</p>
+                <p id="ai-cost-summary" class="ai-cost-summary" aria-live="polite">本会话成本 $0.0000 · 0 tokens</p>
               </div>
               <div class="ai-wb-actions">
+                <button id="ai-new-btn" class="ai-action-btn ai-new-btn" type="button" title="新建对话">
+                  <span>新建对话</span>
+                </button>
                 <button id="ai-clear-btn" class="ai-action-btn" type="button" title="清空当前对话">
                   <span>清空对话</span>
                 </button>
               </div>
+            </div>
+
+            <div class="ai-session-bar">
+              <span class="ai-session-label">历史对话</span>
+              <div id="ai-session-list" class="ai-session-list" aria-label="历史对话列表"></div>
             </div>
 
             <!-- 对话流展示容器 -->
@@ -818,6 +833,7 @@
     </button>
 
     <script src="/vendor/echarts.min.js"></script>
+    <script src="/i18n.js"></script>
     <script src="/app.js" type="module"></script>
     <script src="/ai_chart.js"></script>
     <script src="/ai.js" type="module"></script>

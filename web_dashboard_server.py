@@ -63,7 +63,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         question = (body.get("question") or "").strip()
         payload = body.get("payload") or {}
-        history = body.get("history") or []
+        history = _normalize_ai_history(body.get("history"))
+        history_mode = body.get("history_mode")
+        thread_id = (
+            body.get("thread_id")
+            if history_mode != "client" and isinstance(body.get("thread_id"), str)
+            else None
+        )
         if not question:
             self._send_json({"error": "question is required"}, status=400)
             return
@@ -115,7 +121,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
-        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Cache-Control", "no-cache, no-store")
         self.send_header("X-Accel-Buffering", "no")
         self.send_header("Connection", "keep-alive")
         self.end_headers()
@@ -126,18 +132,29 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
             async def _run() -> None:
                 try:
-                    async for item in stream_answer(question, context, history):
+                    async for item in stream_answer(
+                        question, context, history, thread_id=thread_id
+                    ):
                         # item is already a dict: {"token": ...} or {"status": ...}
                         data = json.dumps(item, ensure_ascii=False)
                         self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
                         self.wfile.flush()
+                except BrokenPipeError:
+                    logger.info("AI 客户端提前断开连接")
+                    return
                 except Exception as exc:  # surface stream errors to the client
                     logger.error("AI 流式回答失败: %s", exc)
                     err = json.dumps({"error": str(exc)}, ensure_ascii=False)
-                    self.wfile.write(f"data: {err}\n\n".encode("utf-8"))
+                    try:
+                        self.wfile.write(f"data: {err}\n\n".encode("utf-8"))
+                        self.wfile.flush()
+                    except BrokenPipeError:
+                        return
+                try:
+                    self.wfile.write(b"data: [DONE]\n\n")
                     self.wfile.flush()
-                self.wfile.write(b"data: [DONE]\n\n")
-                self.wfile.flush()
+                except BrokenPipeError:
+                    logger.info("AI 客户端在结束前断开连接")
 
             loop.run_until_complete(_run())
         finally:
@@ -238,6 +255,24 @@ def _first_param(query: dict[str, list[str]], *keys: str) -> str | None:
         if value:
             return value
     return None
+
+
+def _normalize_ai_history(value: object) -> list[dict[str, str]]:
+    """Bound and validate browser-owned chat history before it reaches the LLM."""
+    if not isinstance(value, list):
+        return []
+    normalized: list[dict[str, str]] = []
+    for item in value[-10:]:
+        if not isinstance(item, dict):
+            continue
+        role = item.get("role")
+        content = item.get("content")
+        if role not in ("user", "assistant") or not isinstance(content, str):
+            continue
+        content = content.strip()
+        if content:
+            normalized.append({"role": role, "content": content[:6000]})
+    return normalized
 
 
 def _query_from_range(range_str: str) -> DashboardQuery | None:

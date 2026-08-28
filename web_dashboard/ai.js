@@ -8,6 +8,7 @@ const AI = (() => {
   const win = typeof window !== "undefined" ? window : globalThis;
   const doc = typeof document !== "undefined" ? document : null;
   const AIChart = win.AIChart || null;
+  const t = (value) => (win.I18n && typeof win.I18n.t === "function" ? win.I18n.t(value) : value);
   const els = {
     // Dedicated page workbench elements (Primary)
     pageMessages: doc ? doc.getElementById("ai-page-messages") : null,
@@ -15,6 +16,9 @@ const AI = (() => {
     pageInput: doc ? doc.getElementById("ai-page-input") : null,
     pageSend: doc ? doc.getElementById("ai-page-send") : null,
     pageScope: doc ? doc.getElementById("ai-page-scope") : null,
+    costSummary: doc ? doc.getElementById("ai-cost-summary") : null,
+    newBtn: doc ? doc.getElementById("ai-new-btn") : null,
+    sessionList: doc ? doc.getElementById("ai-session-list") : null,
     pageSuggestions: doc ? doc.getElementById("ai-page-suggestions") : null,
     welcomeCard: doc ? doc.getElementById("ai-welcome-card") : null,
     clearBtn: doc ? doc.getElementById("ai-clear-btn") : null,
@@ -34,7 +38,13 @@ const AI = (() => {
     drawerScope: doc ? doc.getElementById("ai-scope") : null,
   };
 
-  const history = []; // [{ role: "user" | "assistant", content: "..." }]
+  const STORAGE_KEY = "ai-bi.sessions.v1";
+  const SESSION_LIMIT = 20;
+  const MESSAGE_LIMIT = 40;
+  const SSE_INACTIVITY_MS = 90_000;
+  let history = []; // [{ role: "user" | "assistant", content: "..." }]
+  let sessions = [];
+  let currentSessionId = "";
   let busy = false;
 
   // ----- helpers -----
@@ -48,7 +58,7 @@ const AI = (() => {
     }[c]));
 
   const inline = (t) => {
-    let res = t
+    let res = escapeHtml(t)
       .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
       .replace(/\*(.+?)\*/g, "<em>$1</em>")
       .replace(/`([^`]+?)`/g, "<code>$1</code>")
@@ -88,7 +98,9 @@ const AI = (() => {
     const closeCallout = () => {
       if (!inCallout) return;
       const icons = { note: "ℹ️", tip: "💡", important: "⚡", warning: "⚠️", caution: "🚨" };
-      const titles = { note: "提示", tip: "建议", important: "重要", warning: "预警", caution: "注意" };
+      const titles = {
+        note: t("提示"), tip: t("建议"), important: t("重要"), warning: t("预警"), caution: t("注意"),
+      };
       const content = calloutBuf.map((l) => `<p>${inline(l)}</p>`).join("");
       html += `
         <div class="ai-callout callout-${calloutType}">
@@ -177,12 +189,12 @@ const AI = (() => {
           chartPayloads.push({ type, text: body });
           html += `<div class="ai-chart" data-ai-chart="${chartIdx++}"></div>`;
         } else {
-          html += '<div class="ai-chart ai-chart-pending">正在渲染组件…</div>';
+          html += `<div class="ai-chart ai-chart-pending">${t("正在渲染组件…")}</div>`;
         }
       } else {
         html += `
           <div class="ai-code-block">
-            <button class="ai-copy-btn" type="button" onclick="navigator.clipboard.writeText(this.nextElementSibling.innerText);this.textContent='已复制 ✓';setTimeout(()=>this.textContent='复制',2000)">复制</button>
+            <button class="ai-copy-btn" type="button" onclick="navigator.clipboard.writeText(this.nextElementSibling.innerText);this.textContent='${t("已复制")} ✓';setTimeout(()=>this.textContent='${t("复制")}',2000)">${t("复制")}</button>
             <pre><code>${escapeHtml(body)}</code></pre>
           </div>
         `;
@@ -329,6 +341,156 @@ const AI = (() => {
     scrollDown();
   }
 
+  // ----- Browser-owned session store -----
+  function storage() {
+    try {
+      return win.localStorage || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function makeSession() {
+    const stamp = Date.now();
+    return {
+      id: `session-${stamp}-${Math.random().toString(36).slice(2, 8)}`,
+      title: "新对话",
+      messages: [],
+      usage: { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0, cacheSavingsUsd: 0 },
+      createdAt: stamp,
+      updatedAt: stamp,
+    };
+  }
+
+  function saveSessions() {
+    const store = storage();
+    if (!store) return;
+    try {
+      store.setItem(STORAGE_KEY, JSON.stringify(sessions.slice(0, SESSION_LIMIT)));
+    } catch (_) {
+      // Storage can be disabled or full; the current in-memory session still works.
+    }
+  }
+
+  function loadSessions() {
+    const store = storage();
+    let saved = [];
+    try {
+      saved = store ? JSON.parse(store.getItem(STORAGE_KEY) || "[]") : [];
+    } catch (_) {}
+    if (!Array.isArray(saved)) saved = [];
+    sessions = saved
+      .filter((s) => s && typeof s.id === "string")
+      .slice(0, SESSION_LIMIT)
+      .map((s) => ({
+        ...makeSession(),
+        ...s,
+        messages: Array.isArray(s.messages)
+          ? s.messages.filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string").slice(-MESSAGE_LIMIT)
+          : [],
+        usage: { ...makeSession().usage, ...(s.usage || {}) },
+      }));
+    if (!sessions.length) sessions = [makeSession()];
+    currentSessionId = sessions[0].id;
+    const current = sessions[0];
+    history = current.messages.slice();
+    saveSessions();
+  }
+
+  function currentSession() {
+    return sessions.find((s) => s.id === currentSessionId) || sessions[0];
+  }
+
+  function persistCurrent() {
+    const session = currentSession();
+    if (!session) return;
+    session.messages = history.slice(-MESSAGE_LIMIT);
+    session.updatedAt = Date.now();
+    const firstQuestion = history.find((m) => m.role === "user" && m.content);
+    if (firstQuestion && session.title === "新对话") {
+      session.title = firstQuestion.content.replace(/\s+/g, " ").slice(0, 28) || "新对话";
+    }
+    sessions.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    saveSessions();
+    renderSessionList();
+    renderUsage();
+  }
+
+  function renderUsage() {
+    const usage = currentSession()?.usage || {};
+    const cost = Number(usage.costUsd || 0).toFixed(4);
+    const locale = win.I18n?.language === "en" ? "en-US" : "zh-CN";
+    const tokens = Number(usage.totalTokens || 0).toLocaleString(locale);
+    const savings = Number(usage.cacheSavingsUsd || 0);
+    const savedText = savings > 0 ? ` · ${t("缓存节省")} $${savings.toFixed(4)}` : "";
+    const text = `${t("本会话成本")} $${cost} · ${tokens} ${t("tokens")}${savedText}`;
+    if (els.costSummary) els.costSummary.textContent = text;
+  }
+
+  function renderSessionList() {
+    if (!els.sessionList || !doc) return;
+    els.sessionList.innerHTML = "";
+    sessions.slice(0, SESSION_LIMIT).forEach((session) => {
+      const btn = doc.createElement("button");
+      btn.type = "button";
+      btn.className = `ai-session-item${session.id === currentSessionId ? " active" : ""}`;
+      btn.dataset.sessionId = session.id;
+      btn.title = t(session.title || "新对话");
+      btn.textContent = t(session.title || "新对话");
+      els.sessionList.appendChild(btn);
+    });
+  }
+
+  function renderHistory() {
+    if (els.pageMessages) els.pageMessages.innerHTML = "";
+    if (els.drawerMessages) els.drawerMessages.innerHTML = "";
+    if (!history.length && els.pageMessages && els.welcomeCard) {
+      els.pageMessages.appendChild(els.welcomeCard);
+      els.welcomeCard.style.display = "";
+    } else {
+      history.forEach((message) => appendMessage(message.role, message.content));
+    }
+    if (els.pageSuggestions) els.pageSuggestions.style.display = history.length ? "none" : "";
+    if (els.drawerSuggestions) els.drawerSuggestions.style.display = history.length ? "none" : "";
+    renderUsage();
+    scrollDown();
+  }
+
+  function selectSession(id) {
+    if (busy || !sessions.some((s) => s.id === id)) return;
+    currentSessionId = id;
+    history = (currentSession()?.messages || []).slice();
+    renderSessionList();
+    renderHistory();
+  }
+
+  function newSession() {
+    if (busy) return;
+    const session = makeSession();
+    sessions.unshift(session);
+    sessions = sessions.slice(0, SESSION_LIMIT);
+    currentSessionId = session.id;
+    history = [];
+    saveSessions();
+    renderSessionList();
+    renderHistory();
+    const input = els.pageInput || els.drawerInput;
+    if (input) input.focus();
+  }
+
+  function recordUsage(usage) {
+    const session = currentSession();
+    if (!session || !usage) return;
+    const numeric = ["inputTokens", "cachedInputTokens", "outputTokens", "totalTokens", "costUsd", "cacheSavingsUsd"];
+    numeric.forEach((key) => {
+      const value = Number(usage[key] || 0);
+      if (Number.isFinite(value)) session.usage[key] = Number(session.usage[key] || 0) + value;
+    });
+    session.usage.priceVersion = usage.priceVersion || session.usage.priceVersion || "env-configured";
+    session.usage.model = usage.model || session.usage.model || "";
+    persistCurrent();
+  }
+
   // ----- DOM manipulation -----
   function scrollDown() {
     if (els.pageMessages) {
@@ -355,14 +517,18 @@ const AI = (() => {
 
     const bubble = doc.createElement("div");
     bubble.className = "ai-bubble";
-    bubble.innerHTML = text
-      ? renderMarkdown(text, true).html
-      : '<span class="ai-cursor"></span>';
+    const rendered = text
+      ? renderMarkdown(text, true)
+      : { html: '<span class="ai-cursor"></span>', chartPayloads: [] };
+    bubble.innerHTML = rendered.html;
     wrap.appendChild(bubble);
 
     const container = els.pageMessages || els.drawerMessages;
     if (container) {
       container.appendChild(wrap);
+    }
+    if (role === "assistant" && rendered.chartPayloads.length) {
+      mountCharts(bubble, rendered.chartPayloads);
     }
     scrollDown();
     return bubble;
@@ -372,8 +538,8 @@ const AI = (() => {
     const p = win.DashboardState && win.DashboardState.payload;
     const range = p && p.meta && p.meta.range;
     const text = range
-      ? `基于「${range} · ${p.meta.source || "银豹后台接口"}」数据回答`
-      : "先加载经营数据以获得更准的回答";
+      ? `${t("基于")}「${range} · ${p.meta.source || t("银豹后台接口")}」${t("数据回答")}`
+      : t("先加载经营数据以获得更准的回答");
     if (els.pageScope) els.pageScope.textContent = text;
     if (els.drawerScope) els.drawerScope.textContent = text;
   }
@@ -386,65 +552,47 @@ const AI = (() => {
 
   // ----- Clear Conversation -----
   function clearChat() {
-    history.length = 0;
-    if (els.pageMessages) {
-      els.pageMessages.innerHTML = "";
-      if (els.welcomeCard) {
-        els.welcomeCard.style.display = "";
-        els.pageMessages.appendChild(els.welcomeCard);
-      }
+    if (busy) return;
+    history = [];
+    const session = currentSession();
+    if (session) {
+      session.title = "新对话";
+      session.usage = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0, cacheSavingsUsd: 0 };
     }
-    if (els.drawerMessages) {
-      els.drawerMessages.innerHTML = "";
-    }
-    if (els.pageSuggestions) els.pageSuggestions.style.display = "";
-    if (els.drawerSuggestions) els.drawerSuggestions.style.display = "";
+    persistCurrent();
+    renderHistory();
     if (AIChart) AIChart.disposeAll();
   }
 
   // ----- SSE streaming request -----
-  async function ask(question) {
-    question = (question || "").trim();
-    if (!question || busy) return;
+  function isRetryable(error) {
+    return Boolean(error && (error.retryable || error.name === "TypeError" || error.name === "AbortError"));
+  }
 
-    appendMessage("user", question);
-    history.push({ role: "user", content: question });
+  async function consumeStream(response, bubble, controller) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let full = "";
+    let usage = null;
+    let toolActive = false;
+    let isDone = false;
+    let timedOut = false;
+    let inactivityTimer = null;
 
-    const payload = (win.DashboardState && win.DashboardState.payload) || null;
-    setScope();
-    if (els.pageSuggestions) els.pageSuggestions.style.display = "none";
-    if (els.drawerSuggestions) els.drawerSuggestions.style.display = "none";
-
-    const bubble = appendMessage("assistant", "");
-    setBusy(true);
-
-    const body = JSON.stringify({
-      question,
-      range: (payload && payload.meta && payload.meta.range) || "",
-      history: history.slice(0, -1),
-    });
-
+    const armInactivityTimer = () => {
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+      inactivityTimer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+        reader.cancel().catch(() => {});
+      }, SSE_INACTIVITY_MS);
+    };
+    armInactivityTimer();
     try {
-      const res = await fetch("/api/ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body,
-      });
-
-      if (!res.ok || !res.body) {
-        const err = await res.json().catch(() => ({ error: "服务不可用" }));
-        bubble.innerHTML = renderMarkdown("⚠️ " + (err.error || "请求失败"), true).html;
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      let full = "";
-      let toolActive = false;
-      let isDone = false;
       while (!isDone) {
         const { value, done } = await reader.read();
+        armInactivityTimer();
         if (done) break;
         buf += decoder.decode(value, { stream: true });
         const events = buf.split("\n\n");
@@ -457,43 +605,141 @@ const AI = (() => {
             isDone = true;
             break;
           }
-          try {
-            const obj = JSON.parse(data);
-            if (obj.error) {
-              bubble.innerHTML = renderMarkdown("⚠️ " + obj.error, true).html;
-              isDone = true;
-              break;
+          const obj = JSON.parse(data);
+          if (obj.error) {
+            const error = new Error(obj.error);
+            error.retryable = true;
+            throw error;
+          }
+          if (obj.usage) {
+            usage = obj.usage;
+            continue;
+          }
+          if (obj.status) {
+            toolActive = true;
+            bubble.innerHTML = '<div class="ai-tool">' + escapeHtml(t(obj.label || "正在查询数据…")) + "</div>";
+            scrollDown();
+            continue;
+          }
+          if (obj.token) {
+            if (toolActive) {
+              toolActive = false;
+              bubble.innerHTML = "";
             }
-            if (obj.status) {
-              toolActive = true;
-              bubble.innerHTML =
-                '<div class="ai-tool">' +
-                escapeHtml(obj.label || "正在查询数据…") +
-                "</div>";
-              scrollDown();
-              continue;
-            }
-            if (obj.token) {
-              if (toolActive) {
-                toolActive = false;
-                bubble.innerHTML = "";
-              }
-              full += obj.token;
-              renderChat(bubble, full, false);
-            }
-          } catch (_) {
-            /* ignore partial frames */
+            full += obj.token;
+            renderChat(bubble, full, false);
           }
         }
       }
-      try {
-        await reader.cancel();
-      } catch (_) {}
+      if (timedOut) {
+        const error = new Error("90 秒内没有收到新的回答，连接已自动停止");
+        error.retryable = true;
+        throw error;
+      }
+      return { full, usage };
+    } catch (error) {
+      if (timedOut || error?.name === "AbortError") {
+        const timeoutError = new Error("90 秒内没有收到新的回答，连接已自动停止");
+        timeoutError.retryable = true;
+        throw timeoutError;
+      }
+      throw error;
+    } finally {
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+      try { await reader.cancel(); } catch (_) {}
+    }
+  }
 
-      if (full) renderChat(bubble, full, true);
-      history.push({ role: "assistant", content: full });
-    } catch (e) {
-      bubble.innerHTML = renderMarkdown("⚠️ 网络或解析错误：" + e.message, true).html;
+  async function streamAttempt(question, priorHistory, bubble) {
+    const payload = (win.DashboardState && win.DashboardState.payload) || null;
+    const controller = new AbortController();
+    const body = JSON.stringify({
+      question,
+      range: (payload && payload.meta && payload.meta.range) || "",
+      // The browser session is the source of truth. Do not also send a
+      // thread_id: a server checkpointer would append these messages again.
+      history: priorHistory,
+      history_mode: "client",
+    });
+    let response;
+    try {
+      response = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      throw error;
+    }
+    if (!response.ok || !response.body) {
+      const err = await response.json().catch(() => ({ error: "服务不可用" }));
+      const error = new Error(err.error || "请求失败");
+      error.retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+      throw error;
+    }
+    // consumeStream owns the reader-level inactivity timer. The controller
+    // is retained for browsers that abort a response while it is being read.
+    return consumeStream(response, bubble, controller);
+  }
+
+  function showRetry(bubble, message, question) {
+    bubble.innerHTML = renderMarkdown("⚠️ " + message, true).html;
+    if (!doc) return;
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.className = "ai-retry-btn";
+    button.textContent = t("重试本次提问");
+    button.addEventListener("click", () => {
+      const wrap = bubble.parentElement;
+      if (wrap) wrap.remove();
+      ask(question, { reuseUserMessage: true });
+    });
+    bubble.appendChild(button);
+  }
+
+  async function ask(question, options = {}) {
+    question = (question || "").trim();
+    if (!question || busy) return;
+
+    if (!options.reuseUserMessage) {
+      appendMessage("user", question);
+      history.push({ role: "user", content: question });
+      persistCurrent();
+    }
+
+    setScope();
+    if (els.pageSuggestions) els.pageSuggestions.style.display = "none";
+    if (els.drawerSuggestions) els.drawerSuggestions.style.display = "none";
+
+    const bubble = appendMessage("assistant", "");
+    setBusy(true);
+    bubble.innerHTML = `<div class="ai-tool">${t("正在思考，通常需要几秒…")}</div>`;
+
+    try {
+      let result = null;
+      let lastError = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        if (attempt > 0) {
+          bubble.innerHTML = `<div class="ai-tool">${t("连接稍慢，正在重试（2/2）…")}</div>`;
+        }
+        try {
+          result = await streamAttempt(question, history.slice(0, -1), bubble);
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt === 0 && isRetryable(error)) continue;
+          break;
+        }
+      }
+      if (!result) {
+        showRetry(bubble, `网络或解析错误：${lastError?.message || "请求失败"}`, question);
+        return;
+      }
+      if (result.full) renderChat(bubble, result.full, true);
+      history.push({ role: "assistant", content: result.full || "" });
+      persistCurrent();
+      recordUsage(result.usage);
     } finally {
       setBusy(false);
       scrollDown();
@@ -529,7 +775,14 @@ const AI = (() => {
   // ----- Wiring -----
   if (els.openBtn) els.openBtn.addEventListener("click", navigateToAIPage);
   if (els.fabBtn) els.fabBtn.addEventListener("click", navigateToAIPage);
+  if (els.newBtn) els.newBtn.addEventListener("click", newSession);
   if (els.clearBtn) els.clearBtn.addEventListener("click", clearChat);
+  if (els.sessionList) {
+    els.sessionList.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-session-id]");
+      if (button) selectSession(button.dataset.sessionId);
+    });
+  }
 
   // Page input
   if (els.pageInput) {
@@ -568,7 +821,26 @@ const AI = (() => {
     });
   }
 
-  return { ask, open: navigateToAIPage, clear: clearChat, renderMarkdown };
+  loadSessions();
+  renderSessionList();
+  renderHistory();
+  if (typeof win.addEventListener === "function") {
+    win.addEventListener("languagechange", () => {
+      setScope();
+      renderUsage();
+      renderSessionList();
+      renderHistory();
+    });
+  }
+
+  return {
+    ask,
+    open: navigateToAIPage,
+    clear: clearChat,
+    newSession,
+    selectSession,
+    renderMarkdown,
+  };
 })();
 
 if (typeof module !== "undefined" && module.exports) {

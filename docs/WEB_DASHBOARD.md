@@ -10,7 +10,7 @@
 
 ```bash
 cp .env.example .env
-# 设置 POSPAL_USER 和 POSPAL_PASSWORD
+# 可选：设置 POSPAL_USER 和 POSPAL_PASSWORD；公开演示默认使用脱敏预热缓存
 
 python3 web_dashboard_server.py --host 127.0.0.1 --port 8600
 ```
@@ -19,7 +19,7 @@ python3 web_dashboard_server.py --host 127.0.0.1 --port 8600
 
 服务默认监听 `0.0.0.0`。仅在本机使用时应显式传入 `--host 127.0.0.1`；需要局域网访问时才绑定到可外部访问的地址。
 
-当前服务器没有终端用户登录、字段脱敏或 TLS。`/api/dashboard`、页面明细和 JSON 下载可能返回会员姓名、手机号、支付交易号、收银员信息以及门店经营数据。不要把它暴露到公网或不受信任的局域网；正式共享前必须增加鉴权、敏感字段脱敏和 HTTPS，并限制可访问的网段。
+当前服务器没有终端用户登录或 TLS；但数据进入 Dashboard 前会经过隐私边界处理，会员、交易、支付、员工和门店标识会替换为合成占位值。公开仓库内置的预热缓存不包含真实凭据或原始个人标识。若配置真实银豹凭据用于本地开发，仍应只在受信任的本机使用，并在正式部署前增加鉴权、HTTPS、访问控制和日志审计。
 
 ## 组件职责
 
@@ -27,6 +27,7 @@ python3 web_dashboard_server.py --host 127.0.0.1 --port 8600
 |---|---|
 | `web_dashboard/index.html` | 页面结构、Tab、筛选器和渲染容器 |
 | `web_dashboard/styles.css` | 响应式布局、视觉样式和状态样式 |
+| `web_dashboard/i18n.js` | 中 / 英 UI 切换、浏览器持久化和动态文案翻译 |
 | `web_dashboard/app.js` | 请求 API、维护页面状态、生成表格和 SVG 图表 |
 | `web_dashboard_server.py` | 静态文件服务、查询参数解析、错误响应和 payload 缓存 |
 | `modules/dashboard_api.py` | 日期范围处理、数据聚合、KPI 和业务洞察 |
@@ -69,6 +70,26 @@ python3 web_dashboard_server.py --host 127.0.0.1 --port 8600
 ```
 
 错误响应为 JSON，包含 `error`；服务器内部异常还包含 `type`。只提供一个日期边界会返回 HTTP 400。
+
+### `POST /api/ai/chat`
+
+AI 助手使用同源 SSE 返回流式事件。浏览器会话是历史记录的唯一来源，服务端会过滤消息角色、限制为最近 10 条并将单条消息截断到 6000 个字符，避免历史重复注入和异常请求体膨胀。
+
+请求体示例：
+
+```json
+{
+  "question": "这周报损率是不是偏高？",
+  "range": "2026-08",
+  "history_mode": "client",
+  "history": [
+    {"role": "user", "content": "上周销售怎么样？"},
+    {"role": "assistant", "content": "上周实收约 3.2 万元。"}
+  ]
+}
+```
+
+事件类型包括 `token`、工具调用时的 `status`、回答结束前的 `usage` 和 `[DONE]`。`usage` 包含输入/输出 Token、缓存命中、价格版本、估算成本和缓存节省金额。LLM 超时与费率可通过 `DEEPSEEK_TIMEOUT_SECONDS`、`DEEPSEEK_MAX_RETRIES`、`DEEPSEEK_INPUT_USD_PER_MILLION`、`DEEPSEEK_CACHED_INPUT_USD_PER_MILLION`、`DEEPSEEK_OUTPUT_USD_PER_MILLION` 和 `DEEPSEEK_PRICE_VERSION` 配置。
 
 ## 缓存与刷新
 
@@ -118,7 +139,7 @@ python3 -m py_compile \
 
 查看服务器终端是否完成银豹登录和报表导出。首次加载或强制刷新需要下载多个 Excel 文件，通常比命中缓存慢。
 
-同时确认 `.env` 中同时设置了 `POSPAL_USER` 和 `POSPAL_PASSWORD`。缺少密码时，底层登录代码会尝试通过终端 `input()` 读取，在无交互的服务环境中会表现为请求一直等待。
+若需要切换到本地真实银豹数据，确认 `.env` 中同时设置了 `POSPAL_USER` 和 `POSPAL_PASSWORD`；公开演示不需要这些变量，直接使用仓库内的脱敏预热缓存。
 
 ### 端口被占用
 

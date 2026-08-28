@@ -106,6 +106,24 @@ def test_stream_answer_yields_tokens(monkeypatch):
     assert "".join(i.get("token", "") for i in items) == "逐字回答"
 
 
+def test_usage_summary_calculates_cache_savings(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_MODEL", "test-model")
+    monkeypatch.setenv("DEEPSEEK_INPUT_USD_PER_MILLION", "1")
+    monkeypatch.setenv("DEEPSEEK_CACHED_INPUT_USD_PER_MILLION", "0.1")
+    monkeypatch.setenv("DEEPSEEK_OUTPUT_USD_PER_MILLION", "2")
+    monkeypatch.setenv("DEEPSEEK_PRICE_VERSION", "test-prices")
+
+    result = ai._usage_summary(
+        {"input_tokens": 1000, "cached_input_tokens": 400, "output_tokens": 500}
+    )
+    assert result["model"] == "test-model"
+    assert result["totalTokens"] == 1500
+    assert result["cacheHit"] is True
+    assert result["costUsd"] == 0.00164
+    assert result["cacheSavingsUsd"] == 0.00036
+    assert result["priceVersion"] == "test-prices"
+
+
 def test_trim_payload_scopes():
     full = {
         "meta": {"range": "2026-08"},

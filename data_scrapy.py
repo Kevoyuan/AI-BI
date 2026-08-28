@@ -132,12 +132,14 @@ LOGIN_URL = f"{BASE_URL}/Account/Signin"
 
 def get_credentials() -> Tuple[str, str]:
     """获取登录凭证"""
-    username = os.environ.get("POSPAL_USER", "jhyx007")
+    username = os.environ.get("POSPAL_USER", "").strip()
     password = os.environ.get("POSPAL_PASSWORD")
 
-    if not password:
-        logger.info("密码未在环境变量中找到，请输入密码")
-        password = input("输入密码: ")
+    if not username or not password:
+        raise RuntimeError(
+            "真实银豹数据需要设置 POSPAL_USER 和 POSPAL_PASSWORD；"
+            "公开演示请使用仓库内的脱敏预热缓存"
+        )
 
     return username, password
 

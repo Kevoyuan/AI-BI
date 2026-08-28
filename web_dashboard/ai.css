@@ -1046,6 +1046,7 @@ body.ai-open .ai-fab {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .ai-wb-badge {
@@ -1064,6 +1065,15 @@ body.ai-open .ai-fab {
   margin: 0;
   font-size: 12.5px;
   color: var(--ink-muted, #756d63);
+}
+
+.ai-cost-summary {
+  margin: 0;
+  flex-basis: 100%;
+  font-family: var(--mono, monospace);
+  font-size: 10px;
+  color: var(--muted, #756d63);
+  letter-spacing: 0.01em;
 }
 
 .ai-wb-actions {
@@ -1087,6 +1097,67 @@ body.ai-open .ai-fab {
   background: var(--panel-soft, #f0ebe2);
   color: var(--ink, #2d2924);
   border-color: #baa894;
+}
+
+.ai-session-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--line-soft, #e8e1d7);
+  background: #fcfaf6;
+  flex: none;
+}
+
+.ai-session-label {
+  flex: none;
+  color: var(--muted, #756d63);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ai-session-list {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.ai-session-item {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--muted, #756d63);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.ai-session-item:hover,
+.ai-session-item.active {
+  background: #f0e6d6;
+  border-color: #dccbb4;
+  color: #7c5113;
+}
+
+.ai-retry-btn {
+  margin-top: 10px;
+  border: 1px solid #c49a6c;
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: #fffaf2;
+  color: #7c5113;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ai-retry-btn:hover {
+  background: #f5ebe0;
 }
 
 /* Messages Area */
@@ -1408,6 +1479,18 @@ body.ai-open .ai-fab {
 
   .ai-page-input-container {
     padding: 10px 12px max(14px, env(safe-area-inset-bottom, 14px));
+  }
+
+  .ai-session-bar {
+    padding: 7px 12px;
+  }
+
+  .ai-session-label {
+    display: none;
+  }
+
+  .ai-session-item {
+    max-width: 140px;
   }
 
   #ai-page-input {

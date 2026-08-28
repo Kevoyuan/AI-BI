@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 from typing import Annotated, Any, AsyncGenerator, Dict, List, Sequence, TypedDict
 
@@ -456,6 +457,8 @@ def _build_llm() -> "ChatOpenAI":
         raise RuntimeError("DEEPSEEK_API_KEY 未设置，AI 助手不可用")
     base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     model = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+    timeout = max(1.0, _env_float("DEEPSEEK_TIMEOUT_SECONDS", 60.0))
+    max_retries = max(0, int(_env_float("DEEPSEEK_MAX_RETRIES", 2.0)))
     # DeepSeek's tool-calling is exposed via the OpenAI-compatible chat endpoint;
     # bind_tools attaches the JSON schema and lets the model emit tool_calls.
     return ChatOpenAI(
@@ -465,7 +468,95 @@ def _build_llm() -> "ChatOpenAI":
         streaming=True,
         temperature=0.3,
         max_tokens=1500,
+        timeout=timeout,
+        max_retries=max_retries,
     )
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        value = float(os.getenv(name, str(default)))
+        return value if math.isfinite(value) and value >= 0 else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _extract_usage(chunk: AIMessageChunk) -> Dict[str, int]:
+    """Normalize usage fields across LangChain/OpenAI-compatible responses."""
+    usage = getattr(chunk, "usage_metadata", None) or {}
+    response = getattr(chunk, "response_metadata", None) or {}
+    response_usage = response.get("token_usage") or response.get("usage") or {}
+
+    def integer(*values: Any) -> int:
+        for value in values:
+            try:
+                if value is not None:
+                    return max(0, int(value))
+            except (TypeError, ValueError):
+                continue
+        return 0
+
+    input_details = usage.get("input_token_details") or {}
+    prompt_details = response_usage.get("prompt_tokens_details") or {}
+    return {
+        "input_tokens": integer(
+            usage.get("input_tokens"),
+            usage.get("prompt_tokens"),
+            response_usage.get("input_tokens"),
+            response_usage.get("prompt_tokens"),
+        ),
+        "output_tokens": integer(
+            usage.get("output_tokens"),
+            usage.get("completion_tokens"),
+            response_usage.get("output_tokens"),
+            response_usage.get("completion_tokens"),
+        ),
+        "cached_input_tokens": integer(
+            input_details.get("cache_read"),
+            input_details.get("cached_tokens"),
+            prompt_details.get("cached_tokens"),
+            response_usage.get("cached_tokens"),
+        ),
+    }
+
+
+def _usage_summary(usage: Dict[str, int]) -> Dict[str, Any]:
+    """Return a stable, frontend-friendly token/cost ledger event."""
+    model = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+    input_tokens = max(0, int(usage.get("input_tokens", 0)))
+    output_tokens = max(0, int(usage.get("output_tokens", 0)))
+    cached_tokens = min(
+        input_tokens, max(0, int(usage.get("cached_input_tokens", 0)))
+    )
+    uncached_tokens = max(0, input_tokens - cached_tokens)
+
+    # Prices are deliberately configurable: model pricing changes independently
+    # of the portfolio app. The exact rates used for an event are sent along
+    # with it so a ledger remains auditable after a future price change.
+    input_rate = _env_float("DEEPSEEK_INPUT_USD_PER_MILLION", 0.28)
+    cached_rate = _env_float("DEEPSEEK_CACHED_INPUT_USD_PER_MILLION", 0.028)
+    output_rate = _env_float("DEEPSEEK_OUTPUT_USD_PER_MILLION", 0.42)
+    input_cost = (
+        uncached_tokens * input_rate + cached_tokens * cached_rate
+    ) / 1_000_000
+    uncached_cost = (input_tokens * input_rate) / 1_000_000
+    output_cost = (output_tokens * output_rate) / 1_000_000
+    return {
+        "model": model,
+        "inputTokens": input_tokens,
+        "cachedInputTokens": cached_tokens,
+        "outputTokens": output_tokens,
+        "totalTokens": input_tokens + output_tokens,
+        "cacheHit": cached_tokens > 0,
+        "costUsd": round(input_cost + output_cost, 8),
+        "cacheSavingsUsd": round(max(0.0, uncached_cost - input_cost), 8),
+        "priceVersion": os.getenv("DEEPSEEK_PRICE_VERSION", "env-configured"),
+        "ratesUsdPerMillion": {
+            "input": input_rate,
+            "cachedInput": cached_rate,
+            "output": output_rate,
+        },
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -539,7 +630,12 @@ async def stream_answer(
         )
     messages.append(HumanMessage(content=question))
 
-    if thread_id:
+    # Browser-persisted sessions send their complete history explicitly. In
+    # that mode a checkpointer would append the same messages a second time,
+    # causing duplicated prompts and unbounded context growth. Checkpointer
+    # remains available for server-owned callers that omit history entirely.
+    use_checkpointer = bool(thread_id and not history)
+    if use_checkpointer:
         graph = get_graph(checkpointer=_CHECKPOINTER)
         config = {"configurable": {"thread_id": thread_id}}
     else:
@@ -547,6 +643,7 @@ async def stream_answer(
         config = None
 
     tool_signaled = False
+    usage_totals = {"input_tokens": 0, "output_tokens": 0, "cached_input_tokens": 0}
     astream_kwargs: Dict[str, Any] = {
         "input": {"messages": messages, "context": context, "question": question},
         "stream_mode": "messages",
@@ -557,6 +654,9 @@ async def stream_answer(
     async for chunk, _meta in graph.astream(**astream_kwargs):
         if not isinstance(chunk, AIMessageChunk):
             continue
+        chunk_usage = _extract_usage(chunk)
+        for key, value in chunk_usage.items():
+            usage_totals[key] += value
         # The model requested a tool call — surface a "querying" status once.
         if getattr(chunk, "tool_call_chunks", None) and not tool_signaled:
             tool_signaled = True
@@ -567,3 +667,5 @@ async def stream_answer(
             if tool_signaled:
                 tool_signaled = False  # reset so a 2nd tool round (if any) re-signals
             yield {"token": content}
+    if any(usage_totals.values()):
+        yield {"usage": _usage_summary(usage_totals)}

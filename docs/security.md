@@ -6,9 +6,9 @@ This document describes what the repository does and does not protect. AI-BI is 
 
 The repository provides `data/mock/generate_mock_data.py` for seeded synthetic retail data. It generates sales, waste, weather, membership, and financial examples for local use.
 
-`.gitignore` excludes local SQLite databases and common Excel/CSV exports. This lowers the chance of committing local datasets but is not a substitute for secret scanning, access controls, retention policies, or a review process.
+`.gitignore` excludes local SQLite databases and common Excel/CSV exports. The tracked prewarmed Parquet cache is sanitized: member, transaction, payment, staff, store, and card identifiers are synthetic labels. Runtime PosPal data passes through the same privacy boundary before it is cached or exposed by the dashboard. This lowers exposure risk but is not a substitute for secret scanning, access controls, retention policies, or a review process.
 
-The browser-assisted pipeline reads portal credentials from environment variables, although a missing password can trigger an interactive prompt. Credentials should not be placed in source code or committed configuration files.
+The browser-assisted pipeline reads portal credentials only from environment variables and refuses to use a source-code default. Credentials should not be placed in source code or committed configuration files. Public demo runs should use the bundled sanitized cache instead of real portal credentials.
 
 ## Generated-code execution
 
