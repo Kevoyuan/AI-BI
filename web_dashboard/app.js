@@ -443,13 +443,14 @@ async function init() {
     // Uses the in-memory cache (no force_refresh) — clicking "本月" then
     // "今日" should feel instant, not trigger another xlsx download.
     state.activePreset = "";
-    document.querySelectorAll(".preset").forEach((p) => p.classList.remove("active"));
+    document.querySelectorAll(".preset").forEach((p) => { p.classList.remove("active"); p.setAttribute("aria-selected", "false"); });
     loadDashboard();
   });
   els.downloadJson.addEventListener("click", downloadJson);
   if (els.refresh) els.refresh.addEventListener("click", () => loadDashboard(true));
 
   // Preset bar
+  const presetBar = document.querySelector(".preset-bar");
   document.querySelectorAll(".preset").forEach((btn) => {
     btn.addEventListener("click", () => {
       const preset = btn.dataset.preset;
@@ -457,10 +458,40 @@ async function init() {
       state.activePreset = preset;
       els.dateFrom.value = "";
       els.dateTo.value = "";
-      document.querySelectorAll(".preset").forEach((p) => p.classList.toggle("active", p === btn));
+      document.querySelectorAll(".preset").forEach((p) => {
+        const on = p === btn;
+        p.classList.toggle("active", on);
+        p.setAttribute("aria-selected", on ? "true" : "false");
+      });
       loadDashboard();
     });
+    // Roving-tabindex keyboard nav: ←/→ moves focus, Home/End jump to ends
+    btn.addEventListener("keydown", (e) => {
+      const tabs = [...document.querySelectorAll(".preset")];
+      const i = tabs.indexOf(btn);
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        e.preventDefault();
+        const dir = e.key === "ArrowRight" ? 1 : -1;
+        const next = tabs[(i + dir + tabs.length) % tabs.length];
+        next.focus();
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        tabs[0].focus();
+      } else if (e.key === "End") {
+        e.preventDefault();
+        tabs[tabs.length - 1].focus();
+      }
+    });
   });
+  // Roving tabindex: only the active tab is in the tab order
+  function syncPresetTabindex() {
+    document.querySelectorAll(".preset").forEach((p) => {
+      p.setAttribute("tabindex", p.classList.contains("active") ? "0" : "-1");
+      p.setAttribute("aria-selected", p.classList.contains("active") ? "true" : "false");
+    });
+  }
+  syncPresetTabindex();
+  if (presetBar) presetBar.addEventListener("focusin", syncPresetTabindex);
 
   // Tab system
   document.querySelectorAll(".tab").forEach((btn) => {
