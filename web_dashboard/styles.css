@@ -4313,7 +4313,7 @@ tbody tr:hover {
   letter-spacing: 0.18em;
 }
 
-.weather-now-condition h4 {
+.weather-now-condition .weather-now-label {
   margin: 5px 0 9px;
   font-family: var(--serif);
   font-size: clamp(48px, 8vw, 88px);

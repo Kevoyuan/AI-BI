@@ -3202,7 +3202,7 @@ function renderWeatherDaily(weather) {
         <span class="weather-now-icon" aria-hidden="true">${escapeHtml(latest.icon || "◌")}</span>
         <div class="weather-now-condition">
           <span>${latest.isToday ? "今日" : "最近记录"}</span>
-          <h4>${escapeHtml(latest.condition || "天气未知")}</h4>
+          <p class="weather-now-label" role="text" aria-label="${latest.isToday ? "今日天气" : "最近天气"} ${escapeHtml(latest.condition || "未知")}">${escapeHtml(latest.condition || "天气未知")}</p>
           <p>最高 ${value(latest.temperatureMax, "°")} · 最低 ${value(latest.temperatureMin, "°")}</p>
         </div>
       </div>
