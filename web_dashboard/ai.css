@@ -1497,3 +1497,100 @@ body.ai-open .ai-fab {
     font-size: 16px; /* Prevents auto zoom in iOS Safari */
   }
 }
+
+/* ============================================================
+   TOUCH TARGET COMPLIANCE (WCAG 2.5.5 AAA / 2.5.8 AA)
+   Audit 2026-08-28: 18 of 65 interactive elements were under
+   44x44. Two tiers:
+     Tier A - grow the box (layout has room).
+     Tier B - expand the hit area only, keep the compact visual
+              (lang pill, close button) so the design stays tight.
+   ============================================================ */
+
+/* ----- Tier A: grow the box to 44px min ----- */
+
+/* Date-range presets: 59x35 -> 59x44 */
+.preset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px 6px;
+}
+
+/* Toolbar ghost buttons (刷新数据 / AI 助手 / 下载 JSON): 42 -> 44 */
+.ghost {
+  min-height: 44px;
+}
+
+/* AI suggestion chips: 35 -> 44 */
+.ai-chip {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Inline exec link (查看波士顿四象限…): 192x21 -> 44 tall, keeps
+   the dashed underline tight to the text by using padding not height */
+.exec-link-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 2px;
+}
+
+/* AI send buttons: 42x42 -> 44x44 */
+#ai-send,
+#ai-page-send {
+  width: 44px;
+  height: 44px;
+}
+
+/* ----- Tier B: hit area only, visual unchanged ----- */
+
+/* 17x17 "?" formula hint - fails WCAG 2.5.8 (24x24 AA minimum).
+   Keep the 17px circle, expand the pointer target to 44x44. */
+.kpi-info::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+}
+
+/* Language pill 中 / EN: 25px tall. Growing to 44 would bloat the
+   slim rail and make the two buttons fight for the same pixels.
+   Expand hit area vertically only (they are separated horizontally). */
+.language-toggle button {
+  position: relative;
+}
+
+.language-toggle button::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 44px;
+  transform: translateY(-50%);
+}
+
+/* Drawer close button: 32px visual, 44px hit area */
+.ai-close {
+  position: relative;
+}
+
+.ai-close::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+}
