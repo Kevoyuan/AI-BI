@@ -14,54 +14,9 @@ AI-BI 是一个真实零售经营分析系统的公开脱敏版本。它把浏�
 
 ## 架构
 
-```mermaid
-flowchart LR
-    U["用户"] --> UI["Web Dashboard<br/>ECharts · AI Drawer"]
-
-    subgraph APP["应用层"]
-        direction TB
-        API["HTTP / SSE Server<br/>/api/dashboard · /api/ai/chat"]
-        BI["Dashboard API<br/>指标聚合"]
-    end
-
-    subgraph AI["AI 编排"]
-        direction TB
-        AGENT["LangGraph Agent<br/>上下文 · Tool Routing · Streaming"]
-        TOOLS["确定性分析工具<br/>预测 · 天气 · 购物篮 · 时段<br/>ABC · 储值 · 单品明细"]
-    end
-
-    subgraph DATA["弹性数据层"]
-        direction TB
-        ACCESS["POS Access<br/>Live + 配额保护"]
-        CACHE["Cache Chain<br/>Memory · Parquet · Prewarmed"]
-        DEMO["Demo Fallback<br/>Synthetic SQLite"]
-        WX["Weather<br/>Open-Meteo"]
-    end
-
-    UI --> API
-    API --> BI
-    API --> AGENT
-    AGENT --> TOOLS
-    TOOLS --> BI
-    TOOLS --> ACCESS
-    TOOLS --> WX
-    BI --> ACCESS
-    ACCESS --> CACHE
-    CACHE --> DEMO
-    AGENT -. "SSE Token + Artifact" .-> API
-
-    classDef user fill:#FFFFFF,stroke:#78716C,color:#1C1917,stroke-width:1px;
-    classDef app fill:#F5F5F4,stroke:#A8A29E,color:#292524,stroke-width:1px;
-    classDef agent fill:#FFF7ED,stroke:#C2410C,color:#7C2D12,stroke-width:1.5px;
-    classDef tool fill:#FFFBEB,stroke:#D97706,color:#78350F,stroke-width:1.25px;
-    classDef data fill:#F0FDF4,stroke:#15803D,color:#14532D,stroke-width:1.25px;
-
-    class U,UI user;
-    class API,BI app;
-    class AGENT agent;
-    class TOOLS tool;
-    class ACCESS,CACHE,DEMO,WX data;
-```
+<p align="center">
+  <img src="docs/images/architecture.svg" alt="AI-BI 系统架构" width="100%" />
+</p>
 
 系统主要有两条运行链路：
 
