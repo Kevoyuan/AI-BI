@@ -14,54 +14,9 @@ AI-BI is the sanitized public version of a retail analytics system built for rea
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    U["User"] --> UI["Web Dashboard<br/>ECharts · AI Drawer"]
-
-    subgraph APP["Application"]
-        direction TB
-        API["HTTP / SSE Server<br/>/api/dashboard · /api/ai/chat"]
-        BI["Dashboard API<br/>KPI aggregation"]
-    end
-
-    subgraph AI["AI Orchestration"]
-        direction TB
-        AGENT["LangGraph Agent<br/>context · tool routing · streaming"]
-        TOOLS["Deterministic Tools<br/>forecast · weather · basket · hourly<br/>ABC · recharge · product drill-down"]
-    end
-
-    subgraph DATA["Resilient Data Layer"]
-        direction TB
-        ACCESS["POS Access<br/>live + quota protection"]
-        CACHE["Cache Chain<br/>memory · Parquet · prewarmed"]
-        DEMO["Demo Fallback<br/>synthetic SQLite"]
-        WX["Weather<br/>Open-Meteo"]
-    end
-
-    UI --> API
-    API --> BI
-    API --> AGENT
-    AGENT --> TOOLS
-    TOOLS --> BI
-    TOOLS --> ACCESS
-    TOOLS --> WX
-    BI --> ACCESS
-    ACCESS --> CACHE
-    CACHE --> DEMO
-    AGENT -. "SSE tokens + artifacts" .-> API
-
-    classDef user fill:#FFFFFF,stroke:#78716C,color:#1C1917,stroke-width:1px;
-    classDef app fill:#F5F5F4,stroke:#A8A29E,color:#292524,stroke-width:1px;
-    classDef agent fill:#FFF7ED,stroke:#C2410C,color:#7C2D12,stroke-width:1.5px;
-    classDef tool fill:#FFFBEB,stroke:#D97706,color:#78350F,stroke-width:1.25px;
-    classDef data fill:#F0FDF4,stroke:#15803D,color:#14532D,stroke-width:1.25px;
-
-    class U,UI user;
-    class API,BI app;
-    class AGENT agent;
-    class TOOLS tool;
-    class ACCESS,CACHE,DEMO,WX data;
-```
+<p align="center">
+  <img src="docs/images/architecture.svg" alt="AI-BI system architecture" width="100%" />
+</p>
 
 The web app follows two main paths:
 
