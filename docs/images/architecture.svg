@@ -65,15 +65,17 @@
   <text x="826" y="154" class="mono">modules/ai_assistant.py</text>
   <text x="826" y="176" class="small-orange">context · routing · streaming</text>
 
-  <rect x="1086" y="98" rx="11" ry="11" width="252" height="92" class="box-tool"/>
-  <text x="1110" y="129" class="label">Tool surface</text>
-  <text x="1110" y="154" class="mono">fetch_pospal_data()</text>
-  <text x="1110" y="176" class="mono">run_analysis() · query_product_sales()</text>
+  <rect x="1086" y="98" rx="11" ry="11" width="252" height="110" class="box-tool"/>
+  <text x="1110" y="126" class="label">Tool surface</text>
+  <text x="1110" y="150" class="mono">fetch_pospal_data()</text>
+  <text x="1110" y="172" class="mono">run_analysis()</text>
+  <text x="1110" y="194" class="mono">query_product_sales()</text>
 
-  <rect x="944" y="220" rx="11" ry="11" width="252" height="92" class="box-tool"/>
-  <text x="968" y="251" class="label">Analysis tools</text>
-  <text x="968" y="276" class="mono">modules/analysis_tools.py</text>
-  <text x="968" y="298" class="small">forecast · weather · basket · hourly · ABC</text>
+  <rect x="914" y="226" rx="11" ry="11" width="330" height="96" class="box-tool"/>
+  <text x="938" y="254" class="label">Analysis tools</text>
+  <text x="938" y="278" class="mono">modules/analysis_tools.py</text>
+  <text x="938" y="300" class="small">forecast · weather · basket · hourly</text>
+  <text x="938" y="316" class="small">ABC · recharge · product drill-down</text>
 
   <!-- Data -->
   <rect x="365" y="392" rx="18" ry="18" width="1000" height="300" class="group-data"/>
@@ -112,19 +114,19 @@
   <path class="line" d="M698 134 H802"/>
   <text x="714" y="124" class="small">AI chat</text>
   <path class="line-soft" d="M545 190 V220"/>
-  <path class="line" d="M698 266 H744 V232 H802"/>
-  <text x="716" y="257" class="small">context</text>
+  <path class="line" d="M698 266 H750 V168 H802"/>
+  <text x="708" y="255" class="small">context</text>
 
   <!-- Lines: AI internals -->
   <path class="line-ai" d="M1054 144 H1086"/>
-  <path class="line-ai" d="M1212 190 V204 H1070 V220"/>
+  <path class="line-ai" d="M1212 208 V226"/>
 
   <!-- Lines to data -->
   <path class="line" d="M545 312 V448"/>
-  <path class="line" d="M1070 312 V370 H517 V448"/>
+  <path class="line" d="M1079 322 V370 H517 V448"/>
   <text x="800" y="361" class="small">sales / loss / recharge</text>
-  <path class="line" d="M1070 312 V392 H1093 V448"/>
-  <text x="1104" y="405" class="small">weather</text>
+  <path class="line" d="M1079 322 V382 H1093 V448"/>
+  <text x="1104" y="383" class="small">weather</text>
 
   <!-- Data internals -->
   <path class="line-soft" d="M642 494 H680"/>
