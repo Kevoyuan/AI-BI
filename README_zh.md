@@ -16,57 +16,39 @@ AI-BI 是一个真实零售经营分析系统的公开脱敏版本。它把浏�
 
 ```mermaid
 flowchart LR
-    U["用户"] --> UI["Web Dashboard<br/>ECharts · AI Drawer"]
+    browser["web_dashboard/"]
+    server["web_dashboard_server.py"]
+    dashboard["modules/dashboard_api.py"]
+    agent["modules/ai_assistant.py"]
+    tools["fetch_pospal_data<br/>run_analysis<br/>query_product_sales"]
+    analysis["modules/analysis_tools.py"]
+    pos["modules/pospal_live_data.py"]
+    weather["modules/weather_api.py"]
+    live["POS APIs"]
+    memory["memory cache"]
+    parquet["Parquet cache"]
+    prewarmed["prewarmed_cache/"]
+    sqlite["SQLite demo data"]
 
-    subgraph APP["应用层"]
-        direction TB
-        API["HTTP / SSE Server<br/>/api/dashboard · /api/ai/chat"]
-        BI["Dashboard API<br/>指标聚合"]
-    end
-
-    subgraph AI["AI 编排"]
-        direction TB
-        AGENT["LangGraph Agent<br/>上下文 · Tool Routing · Streaming"]
-        TOOLS["确定性分析工具<br/>预测 · 天气 · 购物篮 · 时段<br/>ABC · 储值 · 单品明细"]
-    end
-
-    subgraph DATA["弹性数据层"]
-        direction TB
-        ACCESS["POS Access<br/>Live + 配额保护"]
-        CACHE["Cache Chain<br/>Memory · Parquet · Prewarmed"]
-        DEMO["Demo Fallback<br/>Synthetic SQLite"]
-        WX["Weather<br/>Open-Meteo"]
-    end
-
-    UI --> API
-    API --> BI
-    API --> AGENT
-    AGENT --> TOOLS
-    TOOLS --> BI
-    TOOLS --> ACCESS
-    TOOLS --> WX
-    BI --> ACCESS
-    ACCESS --> CACHE
-    CACHE --> DEMO
-    AGENT -. "SSE Token + Artifact" .-> API
-
-    classDef user fill:#FFFFFF,stroke:#94A3B8,color:#0F172A,stroke-width:1px;
-    classDef app fill:#F8FAFC,stroke:#CBD5E1,color:#0F172A,stroke-width:1px;
-    classDef agent fill:#EEF2FF,stroke:#6366F1,color:#312E81,stroke-width:1.5px;
-    classDef tool fill:#EFF6FF,stroke:#3B82F6,color:#1E3A8A,stroke-width:1.25px;
-    classDef data fill:#ECFDF5,stroke:#10B981,color:#064E3B,stroke-width:1.25px;
-
-    class U,UI user;
-    class API,BI app;
-    class AGENT agent;
-    class TOOLS tool;
-    class ACCESS,CACHE,DEMO,WX data;
+    browser -->|"GET /api/dashboard"| server
+    browser -->|"POST /api/ai/chat"| server
+    server --> dashboard
+    server --> agent
+    agent --> tools
+    tools --> analysis
+    tools --> pos
+    analysis --> pos
+    analysis --> weather
+    dashboard --> pos
+    pos --> live
+    pos --> memory
+    memory -->|"miss"| parquet
+    parquet -->|"miss"| prewarmed
+    prewarmed -->|"fallback"| sqlite
+    agent -. "SSE" .-> browser
 ```
 
-系统主要有两条运行链路：
-
-- **Dashboard：** 浏览器 → Dashboard API → 缓存 / Live POS 数据。
-- **AI：** 浏览器 → SSE → LangGraph → 确定性工具 → 流式文本与可视化 Artifact。
+Dashboard 链路是 `browser → server → dashboard_api → POS/cache`。AI 请求进入 `ai_assistant`，由 Agent 选择明确的工具执行，再通过 SSE 把结果流式返回浏览器。
 
 ## 能力
 
