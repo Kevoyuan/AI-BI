@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - sync-bllz-ai-2026-09-16
+  pull_request:
+    branches:
+      - main
 
 jobs:
   focused-tests:
