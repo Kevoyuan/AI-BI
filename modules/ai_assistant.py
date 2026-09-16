@@ -1,30 +1,17 @@
-"""LangGraph-based AI assistant for the Web Dashboard (L1 insight narrator).
+"""LangGraph-based AI assistant for the AI-BI Web Dashboard.
 
-Design
-------
-* The frontend already holds the full dashboard JSON (``state.payload``). It
-  POSTs that payload plus the user question and short chat history to
-  ``/api/ai/chat``.
-* This module compresses the payload into a compact business snapshot and feeds
-  it as the system context to a DeepSeek (OpenAI-compatible) chat model.
-* A LangGraph ``StateGraph`` runs a native tool-calling loop:
-    START -> answer -> (tools_condition) -> tools -> answer -> ... -> END
-  The model decides by itself whether to call the ``fetch_pospal_data`` tool,
-  which wraps the existing ``get_dashboard_payload`` (银豹 live data + 4-level
-  cache). This replaces the old Streamlit ``exec(code)`` data path.
-* Answers stream token-by-token through LangGraph's ``stream_mode="messages"``
-  so the server can push an SSE feed to the browser.
-
-Only the LLM call and (optionally) the PosPal fetch touch the network.
+The browser sends the current dashboard context and question to the server. A
+LangGraph tool-calling loop can answer from that context, fetch other PosPal
+ranges, run parameterized analyses, or query a specific product when needed.
 """
-
 from __future__ import annotations
 
-import json
 import logging
 import math
 import os
-from typing import Annotated, Any, AsyncGenerator, Dict, List, Sequence, TypedDict
+import re
+from datetime import date, datetime, timezone
+from typing import Annotated, Any, AsyncGenerator, Dict, List, Sequence, Tuple, TypedDict
 
 logger = logging.getLogger("ai_assistant")
 
@@ -39,7 +26,7 @@ try:
     from langchain_core.tools import tool
     from langchain_openai import ChatOpenAI
     from langgraph.checkpoint.memory import MemorySaver
-    from langgraph.graph import END, START, StateGraph
+    from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
     from langgraph.prebuilt import ToolNode, tools_condition
 except Exception as exc:  # pragma: no cover - import guard
@@ -70,44 +57,37 @@ SYSTEM_TEMPLATE = """你是一家连锁烘焙/餐饮门店（AI-BI 智能商业�
 【分析工具】
 你还有工具 run_analysis，做六类参数化分析（不写代码）：
 - 预测备货：run_analysis(analysis="forecast", date_spec=..., horizon="tomorrow"|"next_week")
-  → 明天/下周销售额预测（近 4 周同星期加权 / 近 8 周趋势）。店主问"明天卖多少/备多少货"时用。
-  预测是参考值，回答时用"预计/大约"措辞并给出置信区间，不要把预测当保证。
-- 天气影响：run_analysis(analysis="weather", date_spec=...) → 各天气对销售的量化影响
-  （以晴天为基准的系数%）+ 恶劣天气预警。店主问"下雨天影响大吗/今天要不要备外卖"时用。
+  → 明天/下周销售额预测。预测是参考值，回答时用"预计/大约"措辞并给出置信区间。
+- 天气影响：run_analysis(analysis="weather", date_spec=...) → 天气实况、历史影响系数和预警。
 - 购物篮连带：run_analysis(analysis="basket", date_spec=..., target_product="...") →
-  全店平均连带率、多件单占比、TOP 共购商品搭配（置信度/提升度 Lift）。店主问"怎么提升客单价/某商品通常和什么一起买/怎么搭配套餐"时用。
+  全店平均连带率、多件单占比、TOP 共购商品搭配。
 - 时段客流潮汐：run_analysis(analysis="hourly", date_spec=...) →
-  07:00~22:00 各小时营收、订单量(TC)、客单价(AC)及早/中/晚波峰占比。店主问"几点人最多/营业高峰/排班/几点主推什么"时用。
+  各小时营收、订单量(TC)、客单价(AC)及波峰占比。
 - 商品ABC与滞销诊断：run_analysis(analysis="abc", date_spec=...) →
-  A类核心爆款(前70%)、B类腰部主力(20%)、C类长尾(10%)及滞销淘汰候选商品。店主问"哪些卖得最好/哪些商品该下架/结构如何"时用。
+  A/B/C 商品结构及滞销淘汰候选商品。
 - 储值健康度：run_analysis(analysis="recharge", date_spec=...) →
-  营收中直接现金进账 vs 储值卡消耗比例、新增充值金额与档位分布。店主问"储值情况怎么样/现金流健康吗/充值多不多"时用。
+  现金进账、储值卡消耗、新增充值金额与档位分布。
 - date_spec 与 fetch_pospal_data 相同；结果可直接转成 chart spec 出图。
 
+【单品明细查询工具】
+你有专门查询单品的工具 query_product_sales(product_name="...", date_spec=..., by_barcode=True)。
+- 当店主询问**某个具体商品、单品名称或单品表现**（例如“马卡龙这两个月卖得怎么样”、“生吐司最近销量”）时，**必须优先调用 query_product_sales**。
+- 严禁仅凭下方看板快照（会截断商品榜单）或 ABC 汇总就断言某个具体单品的真实全量销量。
+- 工具会按商品条码自动合并同一商品改名前后的名称，并返回名称/条码拆分、月度走势及报损情况。
+- 若 has_name_alias=True，应清晰说明总销量以及名称变迁，并结合报损给出销售或备货建议。
+
 【工具调用行为规范】
-1. 需要调用工具时，**直接发起工具调用，严禁在发出工具调用时输出任何占位或过渡文本**（例如严禁输出“我来拉取...”、“正在查询...”）。
-2. 工具返回数据后，必须立刻基于拉取到的真实数据给出完整、详实的深度经营诊断与行动建议，严禁中途草率中断。
+1. 需要调用工具时，直接发起工具调用，不要同时输出“正在查询”等占位文本。
+2. 工具返回后，立刻基于真实数据给出完整经营诊断与行动建议。
 
 【可视化与富工件（Artifacts）渲染支持】
-前端已原生支持多种精美的经营分析工件，适时使用可极大提升店主阅读体验：
-1. 交互图表 (```chart 或 ```echarts)：
-   - type 支持 line(折线) / bar(柱状) / hbar(横向条形) / pie(环形占比) / gauge(目标达成仪表盘) / scatter(散点)；
-   - 示例: ```chart\n{"type":"gauge","title":"本月目标完成度","value":78.5,"unit":"%"}\n```
-   - 示例: ```chart\n{"type":"bar","title":"本周各品类实收","labels":["现烤","西点","饮品"],"series":[{"name":"实收","values":[12000,8500,3200]}]}\n```
-   - 特殊/高级需求（散点、热力图、双轴等）可改用 fenced 块 "```echarts" 直接给 ECharts option（纯 JSON 数据，禁止函数）。
-2. 核心指标卡组 (```metrics)：
-   - 快速展示 2~4 个关键 KPI，带涨跌幅徽章；
-   - 示例: ```metrics\n[{"label":"本周实收","value":"¥3.2万","change":"+14.2%","trend":"up","note":"创近四周新高"},{"label":"综合报损率","value":"2.1%","change":"-0.8%","trend":"down","note":"处于安全线内"}]\n```
-3. 方案对比卡 (```compare)：
-   - 优化前 vs 优化后对比；
-   - 示例: ```compare\n{"title":"清货方案对比","left":{"title":"现状 (打烊报废)","items":["报损率: 4.8%","损失: ¥650/天"]},"right":{"title":"建议 (20点盲盒打折)","items":["报损率降至: 1.2%","回收现金: +¥420/天"]}}\n```
-4. 经营行动清单 (```checklist 或 Markdown 交互复选框 - [ ])：
-   - 示例: ```checklist\n[{"task":"周六推出 38 元家庭下午茶套餐","priority":"high","impact":"+¥4,500"},{"task":"下调法式长棍每日产量 15%","priority":"medium","impact":"减损¥300"}]\n```
-   - 或直接用 Markdown: `- [ ] 周六执行家庭套餐`
-5. 提示/预警呼出框 (GitHub Alert 语法或 ```callout)：
-   - 示例: `> [!WARNING]\n> 现烤类报损已达 6.2%，主要集中在 21:00 后未售出的牛角包。`
-6. 结构化数据表 (Markdown Table)：
-   - 多维度商品、分类明细必须使用标准 Markdown 管道表格 `| 商品 | 实收 | 报损 |`。
+前端原生支持多种经营分析工件，适时使用：
+1. 交互图表 (```chart 或 ```echarts)：type 支持 line / bar / hbar / pie / gauge / scatter；高级需求可直接给 ECharts option（纯 JSON，禁止函数）。
+2. 核心指标卡组 (```metrics)：展示 2~4 个关键 KPI 与涨跌幅。
+3. 方案对比卡 (```compare)：展示优化前后或两个方案的结构化对比。
+4. 经营行动清单 (```checklist 或 Markdown `- [ ]`)。
+5. 提示/预警呼出框 (GitHub Alert 语法或 ```callout)。
+6. 结构化数据表 (Markdown Table)。
 
 {context}
 
@@ -115,66 +95,63 @@ SYSTEM_TEMPLATE = """你是一家连锁烘焙/餐饮门店（AI-BI 智能商业�
 """
 
 
-# 经营领域知识：从 skills/*/SKILL.md 提炼的"仍有效"判断知识（已过滤过时的
-# 硬编码财务参数/目标值——那些以 monthly DB 的 financial 表为准）。
 DOMAIN_KNOWLEDGE = """【经营领域知识（判断参考，勿当绝对真理）】
 - 术语口径：TC=来客数（流水号去重）；AC=客单价（实收金额/TC）；报废率=报损金额/实收金额；
   试吃=备注或报损原因含「试吃」的项目，不计入经营报废；
   连带率=单据平均商品件数；多件单占比=购买件数>1的单据比例；净利润=实收金额-原料成本-运营管理-固定支出。
-- 参考阈值（判断异常时使用）：
-  · 连带率 <1.4 提示需加强组合推荐/收银加购；>1.8 表现优异
-  · 储值卡消耗占比 >50% 且当期新充值低时，提示真实现金流承压风险
-  · 报损率 >5% 值得预警；>8% 警告
-  · 客单价波动 >15% 关注
-  · 单日销售额低于近期均值 2 个标准差 → 高危异常
-  · 连续 ≥5 天下滑 → 高危
-  · 实际偏离目标 >20% → 警告
-- 解读要点：
-  · 面包店周节律明显：工作日平、周末高（周六/周日通常是周一~四的 1.5~2 倍）
-  · 时段潮汐特征：早餐高峰(07:30-09:00, 吐司/咖啡主导)、午后茶歇(12:30-14:30, 甜包/饮品)、晚高峰(17:30-19:30, 现烤/家庭装)
-  · 商品汰换建议：C类长尾商品若连续销量极低，建议果断下架以释放烤箱产能与展示台位
-  · 恶劣天气（雨/台风）通常外卖占比升高、到店下降
-  · 客单价提升抓手：高频共购组合打包（套餐价比单买优惠¥2~3）、收银台小单品（果酱/挂耳）加价购"""
+- 参考阈值：连带率 <1.4 可提示加强组合推荐；储值卡消耗占比 >50% 且当期新充值低时提示现金流风险；
+  报损率 >5% 值得预警、>8% 警告；客单价波动 >15% 关注；单日销售额低于近期均值 2 个标准差可视为高危异常。
+- 解读要点：关注周节律、时段潮汐、C 类长尾商品的持续低销量、恶劣天气对到店与外卖结构的影响，
+  客单价可通过高频共购组合与收银台加购提升。"""
 
 
-# --------------------------------------------------------------------------- #
-# State
-# --------------------------------------------------------------------------- #
 class AIState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
     context: str
     question: str
 
 
-# --------------------------------------------------------------------------- #
-# Context assembly (from dashboard payload)
-# --------------------------------------------------------------------------- #
-def _fmt_money(v: Any) -> str:
-    if v is None:
+def _fmt_money(value: Any) -> str:
+    if value is None:
         return "—"
-    if isinstance(v, (int, float)):
-        if abs(v) >= 10000:
-            return f"¥{v/10000:.2f}万"
-        if abs(v) >= 100:
-            return f"¥{v:,.0f}"
-        return f"{v:g}"
-    return str(v)
+    if isinstance(value, (int, float)):
+        if abs(value) >= 10000:
+            return f"¥{value / 10000:.2f}万"
+        if abs(value) >= 100:
+            return f"¥{value:,.0f}"
+        return f"{value:g}"
+    return str(value)
 
 
-def _fmt_pct(v: Any) -> str:
+def _fmt_pct(value: Any) -> str:
     try:
-        return f"{float(v)*100:.1f}%"
+        return f"{float(value) * 100:.1f}%"
     except (TypeError, ValueError):
         return "—"
 
 
+_CONTEXT_CACHE: Dict[Tuple[str, str], str] = {}
+_MAX_CONTEXT_CACHE = 32
+
+
+def clear_context_cache() -> None:
+    _CONTEXT_CACHE.clear()
+
+
 def build_context_from_payload(payload: Dict[str, Any] | None) -> str:
-    """将看板 JSON 压缩为给 LLM 阅读的业务快照文本。"""
+    """Compress dashboard JSON into a small business snapshot for the LLM."""
     if not payload:
         return "（暂无看板数据，请先加载经营数据）"
 
-    parts: List[str] = []
     meta = payload.get("meta") or {}
+    range_str = str(meta.get("range") or "")
+    generated_at = str(meta.get("generatedAt") or "")
+    if range_str and generated_at:
+        cached = _CONTEXT_CACHE.get((range_str, generated_at))
+        if cached is not None:
+            return cached
+
+    parts: List[str] = []
     if meta.get("range"):
         parts.append(f"## 当前时间范围：{meta.get('range')}（数据来源：{meta.get('source')}）")
 
@@ -190,88 +167,123 @@ def build_context_from_payload(payload: Dict[str, Any] | None) -> str:
             ("净利润(估算)", kpis.get("netProfit")),
             ("净利润率", kpis.get("netProfitRate")),
         ]
-        line = "，".join(f"{k}={_fmt_money(v)}" for k, v in items if v is not None)
+        line = "，".join(f"{key}={_fmt_money(value)}" for key, value in items if value is not None)
         parts.append(f"### 核心 KPI：{line}")
 
     alerts = payload.get("alerts") or []
     if alerts:
-        al = "；".join(f"[{a.get('level', '')}]{a.get('title', '')}" for a in alerts[:6])
-        parts.append(f"### 业务提醒：{al}")
+        text = "；".join(f"[{item.get('level', '')}]{item.get('title', '')}" for item in alerts[:6])
+        parts.append(f"### 业务提醒：{text}")
 
-    tp = payload.get("topProducts") or []
-    if tp:
-        top = "，".join(f"{p.get('name')}({_fmt_money(p.get('amount'))})" for p in tp[:8])
-        parts.append(f"### 热销商品 TOP：{top}")
-
-    cm = payload.get("categoryMargin") or []
-    if cm:
-        cat = "，".join(
-            f"{c.get('category')}(毛利率{_fmt_pct(c.get('margin'))})" for c in cm[:6]
+    top_products = payload.get("topProducts") or []
+    if top_products:
+        text = "，".join(
+            f"{item.get('name')}({_fmt_money(item.get('amount'))})" for item in top_products[:8]
         )
-        parts.append(f"### 分类毛利：{cat}")
+        parts.append(f"### 热销商品 TOP：{text}")
 
-    wp = payload.get("weekdayPattern") or []
-    if wp:
-        wk = "，".join(f"{w.get('weekday')}:{_fmt_money(w.get('revenue'))}" for w in wp[:7])
-        parts.append(f"### 周节律(各星期营收)：{wk}")
+    category_margin = payload.get("categoryMargin") or []
+    if category_margin:
+        text = "，".join(
+            f"{item.get('category')}(毛利率{_fmt_pct(item.get('margin'))})"
+            for item in category_margin[:6]
+        )
+        parts.append(f"### 分类毛利：{text}")
 
-    eff = payload.get("efficiency") or {}
-    if eff:
+    weekday_pattern = payload.get("weekdayPattern") or []
+    if weekday_pattern:
+        text = "，".join(
+            f"{item.get('weekday')}:{_fmt_money(item.get('revenue'))}"
+            for item in weekday_pattern[:7]
+        )
+        parts.append(f"### 周节律(各星期营收)：{text}")
+
+    efficiency = payload.get("efficiency") or {}
+    if efficiency:
         try:
-            eff_line = "，".join(f"{k}={_fmt_money(v)}" for k, v in eff.items() if v is not None)
-            if eff_line:
-                parts.append(f"### 经营效率：{eff_line}")
+            text = "，".join(
+                f"{key}={_fmt_money(value)}"
+                for key, value in efficiency.items()
+                if value is not None
+            )
+            if text:
+                parts.append(f"### 经营效率：{text}")
         except Exception:
             pass
 
-    sm = payload.get("slowMovers") or []
-    if sm:
-        slow = "，".join(f"{s.get('name')}" for s in sm[:5])
-        parts.append(f"### 滞销商品：{slow}")
+    slow_movers = payload.get("slowMovers") or []
+    if slow_movers:
+        text = "，".join(str(item.get("name")) for item in slow_movers[:5])
+        parts.append(f"### 滞销商品：{text}")
 
-    return "\n".join(parts)
+    result = "\n".join(parts)
+    if range_str and generated_at:
+        if len(_CONTEXT_CACHE) >= _MAX_CONTEXT_CACHE:
+            _CONTEXT_CACHE.pop(next(iter(_CONTEXT_CACHE)))
+        _CONTEXT_CACHE[(range_str, generated_at)] = result
+    return result
 
 
 def _build_system_prompt(context: str) -> str:
-    # NOTE: use replace(), not .format() — the template contains JSON examples
-    # with literal { } braces that .format() would try to parse as fields.
     return SYSTEM_TEMPLATE.replace("{context}", context).replace(
         "{domain}", DOMAIN_KNOWLEDGE
     )
 
 
-# --------------------------------------------------------------------------- #
-# PosPal data tool (replaces the old exec(code) data path)
-# --------------------------------------------------------------------------- #
 def _parse_date_spec(spec: Any) -> Any:
-    from datetime import date
-    import re
     from modules.dashboard_api import DashboardQuery
 
+    if isinstance(spec, DashboardQuery):
+        return spec
     if isinstance(spec, str):
-        s = spec.strip()
-        if s in ("today", "yesterday", "week", "month"):
-            return DashboardQuery.from_preset(s)
-        # Match YYYY-MM
-        m = re.match(r"^(\d{4})[-/年](\d{1,2})月?$", s)
-        if m:
-            return DashboardQuery(year=int(m.group(1)), month=int(m.group(2)))
-        # Match MM月
-        m = re.match(r"^(\d{1,2})月$", s)
-        if m:
-            return DashboardQuery(year=2026, month=int(m.group(1)))
-        # Match YYYY-MM-DD to YYYY-MM-DD
-        m = re.match(r"^(\d{4}-\d{2}-\d{2})\s*(?:[~至到,]|to)\s*(\d{4}-\d{2}-\d{2})$", s)
-        if m:
-            df, dt = m.group(1), m.group(2)
-            start = date.fromisoformat(df)
-            return DashboardQuery(year=start.year, month=start.month, date_from=df, date_to=dt)
-        # Match single YYYY-MM-DD
-        m = re.match(r"^(\d{4}-\d{2}-\d{2})$", s)
-        if m:
-            d = m.group(1)
-            start = date.fromisoformat(d)
-            return DashboardQuery(year=start.year, month=start.month, date_from=d, date_to=d)
+        value = spec.strip()
+        if value in ("today", "yesterday", "week", "month"):
+            return DashboardQuery.from_preset(value)
+        match = re.match(r"^(\d{4})[-/年](\d{1,2})月?$", value)
+        if match:
+            return DashboardQuery(year=int(match.group(1)), month=int(match.group(2)))
+        match = re.match(r"^(\d{1,2})月$", value)
+        if match:
+            today = date.today()
+            return DashboardQuery(year=today.year, month=int(match.group(1)))
+        match = re.match(
+            r"^(\d{4})[-/年](\d{1,2})月?\s*(?:[~至到,]|to)\s*(\d{4})[-/年](\d{1,2})月?$",
+            value,
+        )
+        if match:
+            y1, m1, y2, m2 = map(int, match.groups())
+            start = date(y1, m1, 1)
+            end = date(y2, m2, 28)
+            while end.month == m2:
+                end = end.fromordinal(end.toordinal() + 1)
+            end = end.fromordinal(end.toordinal() - 1)
+            if start > end:
+                start, end = end, start
+            return DashboardQuery(
+                year=start.year,
+                month=start.month,
+                date_from=start.isoformat(),
+                date_to=end.isoformat(),
+            )
+        match = re.match(
+            r"^(\d{4}-\d{2}-\d{2})\s*(?:[~至到,]|to)\s*(\d{4}-\d{2}-\d{2})$",
+            value,
+        )
+        if match:
+            start_text, end_text = match.group(1), match.group(2)
+            start, end = date.fromisoformat(start_text), date.fromisoformat(end_text)
+            if start > end:
+                start, end = end, start
+            return DashboardQuery(
+                year=start.year,
+                month=start.month,
+                date_from=start.isoformat(),
+                date_to=end.isoformat(),
+            )
+        match = re.match(r"^(\d{4}-\d{2}-\d{2})$", value)
+        if match:
+            d = date.fromisoformat(match.group(1))
+            return DashboardQuery(year=d.year, month=d.month, date_from=d.isoformat(), date_to=d.isoformat())
         return DashboardQuery.current()
 
     if isinstance(spec, dict):
@@ -279,11 +291,17 @@ def _parse_date_spec(spec: Any) -> Any:
             return DashboardQuery.from_preset(str(spec["preset"]))
         if "year" in spec and "month" in spec:
             return DashboardQuery(year=int(spec["year"]), month=int(spec["month"]))
-        if "date_from" in spec and "date_to" in spec:
-            df, dt = spec["date_from"], spec["date_to"]
-            start = date.fromisoformat(df)
-            return DashboardQuery(year=start.year, month=start.month, date_from=df, date_to=dt)
-
+        if spec.get("date_from") and spec.get("date_to"):
+            start = date.fromisoformat(str(spec["date_from"]))
+            end = date.fromisoformat(str(spec["date_to"]))
+            if start > end:
+                start, end = end, start
+            return DashboardQuery(
+                year=start.year,
+                month=start.month,
+                date_from=start.isoformat(),
+                date_to=end.isoformat(),
+            )
     return DashboardQuery.current()
 
 
@@ -294,25 +312,7 @@ def fetch_pospal_data(
     refresh: bool = False,
     archive: bool = False,
 ) -> dict:
-    """拉取银豹(PosPal)经营后台的实时/历史数据。
-
-    Args:
-        date_spec: 时间范围，支持以下任意形式：
-            - 字典：{"preset": "month"} 或 {"year": 2026, "month": 6} 或 {"date_from": "2026-06-01", "date_to": "2026-06-30"}
-            - 字符串："2026-06"、"2026-07"、"6月"、"month"、"2026-06-01~2026-08-20"
-        scope: 返回粒度，控制 token 用量：
-            - "digest"（默认）：预压缩**文本**快照（最省 token，普通问答首选）
-            - "chart"：画图用的精简数组（限长，去大段）
-            - "summary"：关键段原始 JSON（兼容旧用法）
-            - "full"：全部聚合段（很大，谨慎）
-            - "raw"：底层原始样本行（很大，仅追明细时用）
-        refresh: 是否绕过缓存强制重新拉取（默认 False，优先用缓存；仍有 6 小时配额保护）。
-        archive: 是否把涉及的月份标记为长期归档（永不因 TTL 过期而重新下载）。
-                 适合老板要长期对比的历史月份；数据修正可之后用 refresh=True 覆盖。
-
-    Returns:
-        结构化数据字典（已按 scope 裁剪）。
-    """
+    """拉取银豹(PosPal)经营后台的实时/历史数据。"""
     from modules.dashboard_api import get_dashboard_payload
     from modules.pospal_live_data import archive_month
 
@@ -328,9 +328,6 @@ def fetch_pospal_data(
 
 
 def _covered_months(query: Any) -> List[Tuple[int, int]]:
-    """All (year, month) pairs covered by a DashboardQuery."""
-    from datetime import date
-
     if query.date_from and query.date_to:
         start = date.fromisoformat(query.date_from)
         end = date.fromisoformat(query.date_to)
@@ -349,34 +346,27 @@ def _covered_months(query: Any) -> List[Tuple[int, int]]:
 
 
 def _trim_payload(payload: Dict[str, Any], scope: str) -> Dict[str, Any]:
-    """按 scope 裁剪聚合结果，控制返回体积（也控制喂给 LLM 的 token）。
-
-    - digest（默认）：预压缩**文本**快照（build_context_from_payload），token 最小
-    - chart：画图用的精简数组（限长，去掉 weatherDaily 等大段）
-    - summary：关键段原始 JSON（兼容）
-    - full / raw：全量 / 原始样本行（谨慎使用，token 很大）
-    """
     if scope == "full":
         return payload
     if scope == "raw":
-        return {
-            "meta": payload.get("meta", {}),
-            "raw": payload.get("raw", payload),
-        }
+        return {"meta": payload.get("meta", {}), "raw": payload.get("raw", payload)}
     if scope == "digest":
-        return {
-            "meta": payload.get("meta", {}),
-            "digest": build_context_from_payload(payload),
-        }
+        return {"meta": payload.get("meta", {}), "digest": build_context_from_payload(payload)}
     if scope == "chart":
         out: Dict[str, Any] = {"meta": payload.get("meta", {})}
-        kpis = payload.get("kpis")
-        if kpis:
-            out["kpis"] = kpis
+        if payload.get("kpis"):
+            out["kpis"] = payload["kpis"]
         for key, limit in (
-            ("daily", 60), ("hourly", 24), ("productABC", 30), ("slowMovers", 15),
-            ("paymentMix", 10), ("weekdayPattern", 7), ("categoryMargin", 10),
-            ("topProducts", 15), ("alerts", 10), ("kpiDeltas", 10),
+            ("daily", 60),
+            ("hourly", 24),
+            ("productABC", 30),
+            ("slowMovers", 15),
+            ("paymentMix", 10),
+            ("weekdayPattern", 7),
+            ("categoryMargin", 10),
+            ("topProducts", 15),
+            ("alerts", 10),
+            ("kpiDeltas", 10),
         ):
             value = payload.get(key)
             if isinstance(value, list):
@@ -385,11 +375,21 @@ def _trim_payload(payload: Dict[str, Any], scope: str) -> Dict[str, Any]:
                 out[key] = value
         return out
     summary_keys = [
-        "meta", "kpis", "alerts", "daily", "topProducts", "productABC",
-        "slowMovers", "paymentMix", "categoryMargin", "weekdayPattern",
-        "weatherDaily", "memberSummary", "efficiency",
+        "meta",
+        "kpis",
+        "alerts",
+        "daily",
+        "topProducts",
+        "productABC",
+        "slowMovers",
+        "paymentMix",
+        "categoryMargin",
+        "weekdayPattern",
+        "weatherDaily",
+        "memberSummary",
+        "efficiency",
     ]
-    return {k: payload[k] for k in summary_keys if k in payload}
+    return {key: payload[key] for key in summary_keys if key in payload}
 
 
 @tool
@@ -400,24 +400,11 @@ def run_analysis(
     target_product: str | None = None,
     top_n: int = 10,
 ) -> dict:
-    """运行参数化经营分析（预测/天气影响/购物篮连带/时段客流/商品ABC/储值健康），返回结构化结果供回答或出图。
-
-    Args:
-        analysis: "forecast"(销售预测) | "weather"(天气影响) | "basket"(购物篮连带分析) | "hourly"(24小时时段客流画像) | "abc"(商品ABC与滞销诊断) | "recharge"(储值健康度)。
-        date_spec: 时间范围，与 fetch_pospal_data 相同（preset / year+month /
-            date_from~date_to；缺省近 30~45 天，最长 90 天）。支持字符串如 "2026-08" 或字典。
-        horizon: forecast 专用："tomorrow"(预测明天) 或 "next_week"(预测下周)。
-        target_product: basket 专用：指定某特定商品名称（如"生吐司"），查询与其最常共购的搭配。
-        top_n: basket 专用：返回关联商品搭配对的数量（默认 10）。
-
-    Returns:
-        结构化分析结果字典。
-    """
+    """运行参数化经营分析（预测/天气/购物篮/时段/ABC/储值）。"""
     if analysis not in ("forecast", "weather", "basket", "hourly", "abc", "recharge"):
         raise ValueError("analysis 必须是 forecast、weather、basket、hourly、abc 或 recharge")
     if analysis == "forecast" and horizon not in ("tomorrow", "next_week"):
         raise ValueError("horizon 必须是 tomorrow 或 next_week")
-
     try:
         from modules.analysis_tools import (
             run_basket_analysis,
@@ -438,39 +425,29 @@ def run_analysis(
             return run_hourly_traffic(date_spec)
         if analysis == "abc":
             return run_product_abc(date_spec)
-        if analysis == "recharge":
-            return run_recharge_health(date_spec)
+        return run_recharge_health(date_spec)
     except Exception as exc:
         logger.warning("分析工具 %s 执行异常: %s", analysis, exc)
         return {"analysis": analysis, "error": f"分析执行异常: {exc}"}
 
 
-TOOLS = [fetch_pospal_data, run_analysis]
+@tool
+def query_product_sales(
+    product_name: str,
+    date_spec: Any = None,
+    by_barcode: bool = True,
+) -> dict:
+    """精确/模糊查询特定商品的销售、改名同码合并、走势与报损数据。"""
+    try:
+        from modules.analysis_tools import query_product_sales as _query_sales
+
+        return _query_sales(product_name, date_spec=date_spec, by_barcode=by_barcode)
+    except Exception as exc:
+        logger.warning("单品查询工具 query_product_sales 执行异常: %s", exc)
+        return {"found": False, "error": f"单品查询异常: {exc}"}
 
 
-# --------------------------------------------------------------------------- #
-# LLM
-# --------------------------------------------------------------------------- #
-def _build_llm() -> "ChatOpenAI":
-    api_key = os.getenv("DEEPSEEK_API_KEY")
-    if not api_key:
-        raise RuntimeError("DEEPSEEK_API_KEY 未设置，AI 助手不可用")
-    base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-    model = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
-    timeout = max(1.0, _env_float("DEEPSEEK_TIMEOUT_SECONDS", 60.0))
-    max_retries = max(0, int(_env_float("DEEPSEEK_MAX_RETRIES", 2.0)))
-    # DeepSeek's tool-calling is exposed via the OpenAI-compatible chat endpoint;
-    # bind_tools attaches the JSON schema and lets the model emit tool_calls.
-    return ChatOpenAI(
-        model=model,
-        api_key=api_key,
-        base_url=base_url,
-        streaming=True,
-        temperature=0.3,
-        max_tokens=1500,
-        timeout=timeout,
-        max_retries=max_retries,
-    )
+TOOLS = [fetch_pospal_data, run_analysis, query_product_sales]
 
 
 def _env_float(name: str, default: float) -> float:
@@ -481,8 +458,73 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _configured_model() -> str:
+    return os.getenv("DEEPSEEK_MODEL", "deepseek-flash")
+
+
+def _pricing_period(at: datetime | None = None) -> str:
+    """DeepSeek peak pricing: weekdays 01:00-04:00 and 06:00-10:00 UTC."""
+    moment = at or datetime.now(timezone.utc)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    utc = moment.astimezone(timezone.utc)
+    peak = utc.weekday() < 5 and ((1 <= utc.hour < 4) or (6 <= utc.hour < 10))
+    return "peak" if peak else "off_peak"
+
+
+_LLM_CACHE: Dict[Tuple[str, str, str, float, int], Any] = {}
+_BOUND_LLM_CACHE: Dict[Tuple[str, str, str, float, int], Tuple[Any, Any]] = {}
+
+
+def clear_llm_cache() -> None:
+    _LLM_CACHE.clear()
+    _BOUND_LLM_CACHE.clear()
+
+
+def _llm_cache_key() -> Tuple[str, str, str, float, int]:
+    return (
+        os.getenv("DEEPSEEK_API_KEY", ""),
+        os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+        _configured_model(),
+        max(1.0, _env_float("DEEPSEEK_TIMEOUT_SECONDS", 300.0)),
+        max(0, int(_env_float("DEEPSEEK_MAX_RETRIES", 2.0))),
+    )
+
+
+def _build_llm() -> "ChatOpenAI":
+    api_key, base_url, model, timeout, max_retries = _llm_cache_key()
+    if not api_key:
+        raise RuntimeError("DEEPSEEK_API_KEY 未设置，AI 助手不可用")
+    cache_key = (api_key, base_url, model, timeout, max_retries)
+    cached = _LLM_CACHE.get(cache_key)
+    if cached is not None and type(cached) is ChatOpenAI:
+        return cached
+    client = ChatOpenAI(
+        model=model,
+        api_key=api_key,
+        base_url=base_url,
+        streaming=True,
+        temperature=0.3,
+        max_tokens=1500,
+        timeout=timeout,
+        max_retries=max_retries,
+    )
+    _LLM_CACHE[cache_key] = client
+    return client
+
+
+def _get_bound_llm() -> Any:
+    llm = _build_llm()
+    cache_key = _llm_cache_key()
+    cached = _BOUND_LLM_CACHE.get(cache_key)
+    if cached is not None and cached[0] is llm:
+        return cached[1]
+    bound = llm.bind_tools(TOOLS)
+    _BOUND_LLM_CACHE[cache_key] = (llm, bound)
+    return bound
+
+
 def _extract_usage(chunk: AIMessageChunk) -> Dict[str, int]:
-    """Normalize usage fields across LangChain/OpenAI-compatible responses."""
     usage = getattr(chunk, "usage_metadata", None) or {}
     response = getattr(chunk, "response_metadata", None) or {}
     response_usage = response.get("token_usage") or response.get("usage") or {}
@@ -521,26 +563,24 @@ def _extract_usage(chunk: AIMessageChunk) -> Dict[str, int]:
 
 
 def _usage_summary(usage: Dict[str, int]) -> Dict[str, Any]:
-    """Return a stable, frontend-friendly token/cost ledger event."""
-    model = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+    """Return a stable token/cost ledger event for the frontend."""
+    model = _configured_model()
     input_tokens = max(0, int(usage.get("input_tokens", 0)))
     output_tokens = max(0, int(usage.get("output_tokens", 0)))
-    cached_tokens = min(
-        input_tokens, max(0, int(usage.get("cached_input_tokens", 0)))
-    )
+    cached_tokens = min(input_tokens, max(0, int(usage.get("cached_input_tokens", 0))))
     uncached_tokens = max(0, input_tokens - cached_tokens)
 
-    # Prices are deliberately configurable: model pricing changes independently
-    # of the portfolio app. The exact rates used for an event are sent along
-    # with it so a ledger remains auditable after a future price change.
-    input_rate = _env_float("DEEPSEEK_INPUT_USD_PER_MILLION", 0.28)
-    cached_rate = _env_float("DEEPSEEK_CACHED_INPUT_USD_PER_MILLION", 0.028)
-    output_rate = _env_float("DEEPSEEK_OUTPUT_USD_PER_MILLION", 0.42)
-    input_cost = (
-        uncached_tokens * input_rate + cached_tokens * cached_rate
-    ) / 1_000_000
-    uncached_cost = (input_tokens * input_rate) / 1_000_000
-    output_cost = (output_tokens * output_rate) / 1_000_000
+    period = _pricing_period()
+    flash_defaults = {
+        "off_peak": {"input": 0.15, "cached": 0.003, "output": 0.60},
+        "peak": {"input": 0.30, "cached": 0.006, "output": 1.20},
+    }[period]
+    input_rate = _env_float("DEEPSEEK_INPUT_USD_PER_MILLION", flash_defaults["input"])
+    cached_rate = _env_float("DEEPSEEK_CACHED_INPUT_USD_PER_MILLION", flash_defaults["cached"])
+    output_rate = _env_float("DEEPSEEK_OUTPUT_USD_PER_MILLION", flash_defaults["output"])
+    input_cost = (uncached_tokens * input_rate + cached_tokens * cached_rate) / 1_000_000
+    uncached_cost = input_tokens * input_rate / 1_000_000
+    output_cost = output_tokens * output_rate / 1_000_000
     return {
         "model": model,
         "inputTokens": input_tokens,
@@ -550,7 +590,8 @@ def _usage_summary(usage: Dict[str, int]) -> Dict[str, Any]:
         "cacheHit": cached_tokens > 0,
         "costUsd": round(input_cost + output_cost, 8),
         "cacheSavingsUsd": round(max(0.0, uncached_cost - input_cost), 8),
-        "priceVersion": os.getenv("DEEPSEEK_PRICE_VERSION", "env-configured"),
+        "priceVersion": os.getenv("DEEPSEEK_PRICE_VERSION", "2026-09-10"),
+        "pricingPeriod": period,
         "ratesUsdPerMillion": {
             "input": input_rate,
             "cachedInput": cached_rate,
@@ -559,16 +600,10 @@ def _usage_summary(usage: Dict[str, int]) -> Dict[str, Any]:
     }
 
 
-# --------------------------------------------------------------------------- #
-# Graph nodes
-# --------------------------------------------------------------------------- #
 async def _answer_node(state: AIState) -> Dict[str, Any]:
-    llm = _build_llm().bind_tools(TOOLS)
-    system = _build_system_prompt(state["context"])
-    messages: List[BaseMessage] = [SystemMessage(content=system)]
+    llm = _get_bound_llm()
+    messages: List[BaseMessage] = [SystemMessage(content=_build_system_prompt(state["context"]))]
     messages.extend(state["messages"])
-    # ainvoke lets LangGraph's stream_mode="messages" intercept and emit
-    # AIMessageChunk tokens (and tool_call chunks) to the caller.
     response = await llm.ainvoke(messages)
     return {"messages": [response]}
 
@@ -577,13 +612,13 @@ _CHECKPOINTER = MemorySaver()
 
 
 def _build_graph(checkpointer: Any = None):
-    g = StateGraph(AIState)
-    g.add_node("answer", _answer_node)
-    g.add_node("tools", ToolNode(TOOLS))
-    g.add_edge(START, "answer")
-    g.add_conditional_edges("answer", tools_condition)
-    g.add_edge("tools", "answer")
-    return g.compile(checkpointer=checkpointer)
+    graph = StateGraph(AIState)
+    graph.add_node("answer", _answer_node)
+    graph.add_node("tools", ToolNode(TOOLS))
+    graph.add_edge(START, "answer")
+    graph.add_conditional_edges("answer", tools_condition)
+    graph.add_edge("tools", "answer")
+    return graph.compile(checkpointer=checkpointer)
 
 
 _GRAPH = None
@@ -591,7 +626,6 @@ _STATEFUL_GRAPH = None
 
 
 def get_graph(checkpointer: Any = None):
-    """获取编译后的图。若指定 checkpointer 则返回带状态持久化的图实例。"""
     global _GRAPH, _STATEFUL_GRAPH
     if checkpointer is not None:
         if _STATEFUL_GRAPH is None:
@@ -602,38 +636,23 @@ def get_graph(checkpointer: Any = None):
     return _GRAPH
 
 
-# --------------------------------------------------------------------------- #
-# Public streaming entry point
-# --------------------------------------------------------------------------- #
 async def stream_answer(
     question: str,
     context: str,
     history: List[Dict[str, str]] | None = None,
     thread_id: str | None = None,
 ) -> AsyncGenerator[Dict[str, Any], None]:
-    """Yield ``{"token": ...}`` / ``{"status": ...}`` dicts as they arrive.
-
-    ``history`` is a list of ``{"role": "user"|"assistant", "content": "..."}``.
-    ``thread_id`` can optionally identify a continuous multi-turn session in Checkpointer.
-    """
+    """Yield token, tool-status and usage events as the LangGraph run streams."""
     history = history or []
     messages: List[BaseMessage] = []
-    for h in history[-10:]:
-        role = h.get("role")
-        content = h.get("content", "")
+    for item in history[-10:]:
+        role = item.get("role")
+        content = item.get("content", "")
         if not content:
             continue
-        messages.append(
-            AIMessage(content=content)
-            if role == "assistant"
-            else HumanMessage(content=content)
-        )
+        messages.append(AIMessage(content=content) if role == "assistant" else HumanMessage(content=content))
     messages.append(HumanMessage(content=question))
 
-    # Browser-persisted sessions send their complete history explicitly. In
-    # that mode a checkpointer would append the same messages a second time,
-    # causing duplicated prompts and unbounded context growth. Checkpointer
-    # remains available for server-owned callers that omit history entirely.
     use_checkpointer = bool(thread_id and not history)
     if use_checkpointer:
         graph = get_graph(checkpointer=_CHECKPOINTER)
@@ -644,28 +663,47 @@ async def stream_answer(
 
     tool_signaled = False
     usage_totals = {"input_tokens": 0, "output_tokens": 0, "cached_input_tokens": 0}
-    astream_kwargs: Dict[str, Any] = {
+    stream_kwargs: Dict[str, Any] = {
         "input": {"messages": messages, "context": context, "question": question},
         "stream_mode": "messages",
     }
     if config:
-        astream_kwargs["config"] = config
+        stream_kwargs["config"] = config
 
-    async for chunk, _meta in graph.astream(**astream_kwargs):
+    async for chunk, _meta in graph.astream(**stream_kwargs):
         if not isinstance(chunk, AIMessageChunk):
             continue
-        chunk_usage = _extract_usage(chunk)
-        for key, value in chunk_usage.items():
+        for key, value in _extract_usage(chunk).items():
             usage_totals[key] += value
-        # The model requested a tool call — surface a "querying" status once.
-        if getattr(chunk, "tool_call_chunks", None) and not tool_signaled:
+
+        tool_chunks = getattr(chunk, "tool_call_chunks", None)
+        if tool_chunks and not tool_signaled:
             tool_signaled = True
-            yield {"status": "tool", "label": "正在查询经营数据…"}
+            tool_name = ""
+            for tool_chunk in tool_chunks:
+                if isinstance(tool_chunk, dict) and tool_chunk.get("name"):
+                    tool_name = str(tool_chunk.get("name"))
+                    break
+                if getattr(tool_chunk, "name", None):
+                    tool_name = str(tool_chunk.name)
+                    break
+            labels = {
+                "run_analysis": "正在运行经营深度分析…",
+                "fetch_pospal_data": "正在拉取经营数据…",
+                "query_product_sales": "正在查询单品销售明细…",
+            }
+            yield {
+                "status": "tool",
+                "label": labels.get(tool_name, "正在查询经营数据…"),
+                "tool": tool_name,
+            }
             continue
+
         content = chunk.content
         if content:
             if tool_signaled:
-                tool_signaled = False  # reset so a 2nd tool round (if any) re-signals
+                tool_signaled = False
             yield {"token": content}
+
     if any(usage_totals.values()):
         yield {"usage": _usage_summary(usage_totals)}
