@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="760" viewBox="0 0 1440 760" role="img" aria-labelledby="title desc">
+  <title id="title">AI-BI system architecture</title>
+  <desc id="desc">Web dashboard and HTTP server connected to LangGraph orchestration, deterministic analytics tools, POS access, caches, fallback data, and weather.</desc>
+
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#57534e"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#c2410c"/>
+    </marker>
+    <style>
+      .bg { fill:#ffffff; }
+      .group { fill:#fafaf9; stroke:#d6d3d1; stroke-width:1; }
+      .group-ai { fill:#fffaf5; stroke:#fed7aa; stroke-width:1; }
+      .group-data { fill:#f8fbf8; stroke:#bbd7c2; stroke-width:1; }
+      .box { fill:#ffffff; stroke:#a8a29e; stroke-width:1; }
+      .box-ai { fill:#fff7ed; stroke:#c2410c; stroke-width:1.5; }
+      .box-tool { fill:#fffbeb; stroke:#d97706; stroke-width:1.25; }
+      .box-data { fill:#ffffff; stroke:#5f7f67; stroke-width:1.15; }
+      .box-fallback { fill:#f7faf7; stroke:#86a38c; stroke-width:1; stroke-dasharray:5 4; }
+      .title { font:600 16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; fill:#1c1917; letter-spacing:.01em; }
+      .label { font:600 15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; fill:#292524; }
+      .sub { font:400 13px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; fill:#78716c; }
+      .mono { font:500 13px ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace; fill:#44403c; }
+      .small { font:500 12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; fill:#78716c; }
+      .small-orange { font:600 12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; fill:#9a3412; }
+      .small-green { font:600 12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; fill:#3f6247; }
+      .line { fill:none; stroke:#57534e; stroke-width:1.35; marker-end:url(#arrow); }
+      .line-soft { fill:none; stroke:#a8a29e; stroke-width:1.15; marker-end:url(#arrow); }
+      .line-ai { fill:none; stroke:#c2410c; stroke-width:1.45; marker-end:url(#arrow-orange); }
+      .line-dashed { fill:none; stroke:#78716c; stroke-width:1.15; stroke-dasharray:6 5; marker-end:url(#arrow); }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1440" height="760"/>
+
+  <!-- Client -->
+  <text x="70" y="58" class="title">CLIENT</text>
+  <rect x="70" y="82" rx="12" ry="12" width="245" height="116" class="box"/>
+  <text x="96" y="118" class="label">Web Dashboard</text>
+  <text x="96" y="145" class="mono">web_dashboard/</text>
+  <text x="96" y="173" class="sub">ECharts · AI drawer · artifacts</text>
+
+  <!-- Application -->
+  <rect x="365" y="42" rx="18" ry="18" width="360" height="300" class="group"/>
+  <text x="392" y="73" class="title">APPLICATION</text>
+
+  <rect x="392" y="98" rx="11" ry="11" width="306" height="92" class="box"/>
+  <text x="416" y="129" class="label">HTTP / SSE server</text>
+  <text x="416" y="154" class="mono">web_dashboard_server.py</text>
+  <text x="416" y="176" class="small">/api/dashboard · /api/ai/chat</text>
+
+  <rect x="392" y="220" rx="11" ry="11" width="306" height="92" class="box"/>
+  <text x="416" y="251" class="label">Dashboard aggregation</text>
+  <text x="416" y="276" class="mono">modules/dashboard_api.py</text>
+  <text x="416" y="298" class="small">KPI + business context</text>
+
+  <!-- AI -->
+  <rect x="775" y="42" rx="18" ry="18" width="590" height="300" class="group-ai"/>
+  <text x="802" y="73" class="title">AI ORCHESTRATION</text>
+
+  <rect x="802" y="98" rx="11" ry="11" width="252" height="92" class="box-ai"/>
+  <text x="826" y="129" class="label">LangGraph agent</text>
+  <text x="826" y="154" class="mono">modules/ai_assistant.py</text>
+  <text x="826" y="176" class="small-orange">context · routing · streaming</text>
+
+  <rect x="1086" y="98" rx="11" ry="11" width="252" height="92" class="box-tool"/>
+  <text x="1110" y="129" class="label">Tool surface</text>
+  <text x="1110" y="154" class="mono">fetch_pospal_data()</text>
+  <text x="1110" y="176" class="mono">run_analysis() · query_product_sales()</text>
+
+  <rect x="944" y="220" rx="11" ry="11" width="252" height="92" class="box-tool"/>
+  <text x="968" y="251" class="label">Analysis tools</text>
+  <text x="968" y="276" class="mono">modules/analysis_tools.py</text>
+  <text x="968" y="298" class="small">forecast · weather · basket · hourly · ABC</text>
+
+  <!-- Data -->
+  <rect x="365" y="392" rx="18" ry="18" width="1000" height="300" class="group-data"/>
+  <text x="392" y="423" class="title">DATA</text>
+
+  <rect x="392" y="448" rx="11" ry="11" width="250" height="92" class="box-data"/>
+  <text x="416" y="479" class="label">POS access</text>
+  <text x="416" y="504" class="mono">modules/pospal_live_data.py</text>
+  <text x="416" y="526" class="small-green">live access · quota protection</text>
+
+  <rect x="680" y="448" rx="11" ry="11" width="250" height="92" class="box-data"/>
+  <text x="704" y="479" class="label">Runtime cache</text>
+  <text x="704" y="504" class="mono">memory → Parquet</text>
+  <text x="704" y="526" class="small">fast path for repeated reads</text>
+
+  <rect x="968" y="448" rx="11" ry="11" width="250" height="92" class="box-data"/>
+  <text x="992" y="479" class="label">Weather</text>
+  <text x="992" y="504" class="mono">modules/weather_api.py</text>
+  <text x="992" y="526" class="small">Open-Meteo</text>
+
+  <rect x="536" y="578" rx="11" ry="11" width="250" height="78" class="box-fallback"/>
+  <text x="560" y="608" class="label">Prewarmed data</text>
+  <text x="560" y="633" class="mono">prewarmed_cache/</text>
+
+  <rect x="824" y="578" rx="11" ry="11" width="250" height="78" class="box-fallback"/>
+  <text x="848" y="608" class="label">Demo fallback</text>
+  <text x="848" y="633" class="mono">synthetic SQLite</text>
+
+  <!-- Lines: client/application -->
+  <path class="line" d="M315 118 H392"/>
+  <text x="332" y="109" class="small">HTTP</text>
+  <path class="line-ai" d="M392 164 H342 V182 H315"/>
+  <text x="330" y="174" class="small-orange">SSE</text>
+
+  <!-- Lines: application/AI -->
+  <path class="line" d="M698 134 H802"/>
+  <text x="714" y="124" class="small">AI chat</text>
+  <path class="line-soft" d="M545 190 V220"/>
+  <path class="line" d="M698 266 H744 V232 H802"/>
+  <text x="716" y="257" class="small">context</text>
+
+  <!-- Lines: AI internals -->
+  <path class="line-ai" d="M1054 144 H1086"/>
+  <path class="line-ai" d="M1212 190 V204 H1070 V220"/>
+
+  <!-- Lines to data -->
+  <path class="line" d="M545 312 V448"/>
+  <path class="line" d="M1070 312 V370 H517 V448"/>
+  <text x="800" y="361" class="small">sales / loss / recharge</text>
+  <path class="line" d="M1070 312 V392 H1093 V448"/>
+  <text x="1104" y="405" class="small">weather</text>
+
+  <!-- Data internals -->
+  <path class="line-soft" d="M642 494 H680"/>
+  <text x="649" y="485" class="small">cache</text>
+  <path class="line-dashed" d="M805 540 V560 H661 V578"/>
+  <text x="685" y="552" class="small">miss</text>
+  <path class="line-dashed" d="M786 617 H824"/>
+  <text x="792" y="607" class="small">fallback</text>
+
+  <!-- External POS -->
+  <rect x="70" y="448" rx="11" ry="11" width="245" height="92" class="box"/>
+  <text x="96" y="479" class="label">POS APIs</text>
+  <text x="96" y="504" class="sub">live operational data</text>
+  <path class="line" d="M315 494 H392"/>
+
+  <!-- Footer note -->
+  <text x="70" y="718" class="small">Two paths share the same data layer: dashboard aggregation for BI, and tool-grounded analysis for AI responses.</text>
+</svg>
