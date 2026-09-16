@@ -1,9 +1,12 @@
 """Regression tests for the bllz-derived single-product analysis path."""
 from datetime import date
+import sys
 
 import pandas as pd
 
-from modules import analysis_tools as tools
+sys.path.insert(0, ".")
+
+from modules import analysis_tools as tools  # noqa: E402
 
 
 def test_resolve_window_month_range():
