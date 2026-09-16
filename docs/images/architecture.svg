@@ -23,6 +23,7 @@
       .label { font:600 15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; fill:#292524; }
       .sub { font:400 13px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; fill:#78716c; }
       .mono { font:500 13px ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace; fill:#44403c; }
+      .mono-sm { font:500 12px ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace; fill:#44403c; }
       .small { font:500 12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; fill:#78716c; }
       .small-orange { font:600 12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; fill:#9a3412; }
       .small-green { font:600 12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; fill:#3f6247; }
@@ -35,100 +36,81 @@
 
   <rect class="bg" width="1440" height="760"/>
 
-  <!-- Client -->
   <text x="70" y="58" class="title">CLIENT</text>
   <rect x="70" y="82" rx="12" ry="12" width="245" height="116" class="box"/>
   <text x="96" y="118" class="label">Web Dashboard</text>
   <text x="96" y="145" class="mono">web_dashboard/</text>
   <text x="96" y="173" class="sub">ECharts · AI drawer · artifacts</text>
 
-  <!-- Application -->
   <rect x="365" y="42" rx="18" ry="18" width="360" height="300" class="group"/>
   <text x="392" y="73" class="title">APPLICATION</text>
-
   <rect x="392" y="98" rx="11" ry="11" width="306" height="92" class="box"/>
   <text x="416" y="129" class="label">HTTP / SSE server</text>
   <text x="416" y="154" class="mono">web_dashboard_server.py</text>
   <text x="416" y="176" class="small">/api/dashboard · /api/ai/chat</text>
-
   <rect x="392" y="220" rx="11" ry="11" width="306" height="92" class="box"/>
   <text x="416" y="251" class="label">Dashboard aggregation</text>
   <text x="416" y="276" class="mono">modules/dashboard_api.py</text>
   <text x="416" y="298" class="small">KPI + business context</text>
 
-  <!-- AI -->
   <rect x="775" y="42" rx="18" ry="18" width="590" height="300" class="group-ai"/>
   <text x="802" y="73" class="title">AI ORCHESTRATION</text>
-
   <rect x="802" y="98" rx="11" ry="11" width="252" height="92" class="box-ai"/>
   <text x="826" y="129" class="label">LangGraph agent</text>
   <text x="826" y="154" class="mono">modules/ai_assistant.py</text>
   <text x="826" y="176" class="small-orange">context · routing · streaming</text>
-
   <rect x="1086" y="98" rx="11" ry="11" width="252" height="110" class="box-tool"/>
   <text x="1110" y="126" class="label">Tool surface</text>
   <text x="1110" y="150" class="mono">fetch_pospal_data()</text>
   <text x="1110" y="172" class="mono">run_analysis()</text>
   <text x="1110" y="194" class="mono">query_product_sales()</text>
-
   <rect x="914" y="226" rx="11" ry="11" width="330" height="96" class="box-tool"/>
   <text x="938" y="254" class="label">Analysis tools</text>
   <text x="938" y="278" class="mono">modules/analysis_tools.py</text>
-  <text x="938" y="300" class="small">forecast · weather · basket · hourly</text>
-  <text x="938" y="316" class="small">ABC · recharge · product drill-down</text>
+  <text x="938" y="299" class="small">forecast · weather · basket · hourly</text>
+  <text x="938" y="314" class="small">ABC · recharge · product drill-down</text>
 
-  <!-- Data -->
   <rect x="365" y="392" rx="18" ry="18" width="1000" height="300" class="group-data"/>
   <text x="392" y="423" class="title">DATA</text>
-
   <rect x="392" y="448" rx="11" ry="11" width="250" height="92" class="box-data"/>
   <text x="416" y="479" class="label">POS access</text>
-  <text x="416" y="504" class="mono">modules/pospal_live_data.py</text>
+  <text x="416" y="504" class="mono-sm">modules/pospal_live_data.py</text>
   <text x="416" y="526" class="small-green">live access · quota protection</text>
-
   <rect x="680" y="448" rx="11" ry="11" width="250" height="92" class="box-data"/>
   <text x="704" y="479" class="label">Runtime cache</text>
   <text x="704" y="504" class="mono">memory → Parquet</text>
   <text x="704" y="526" class="small">fast path for repeated reads</text>
-
   <rect x="968" y="448" rx="11" ry="11" width="250" height="92" class="box-data"/>
   <text x="992" y="479" class="label">Weather</text>
   <text x="992" y="504" class="mono">modules/weather_api.py</text>
   <text x="992" y="526" class="small">Open-Meteo</text>
-
   <rect x="536" y="578" rx="11" ry="11" width="250" height="78" class="box-fallback"/>
   <text x="560" y="608" class="label">Prewarmed data</text>
   <text x="560" y="633" class="mono">prewarmed_cache/</text>
-
   <rect x="824" y="578" rx="11" ry="11" width="250" height="78" class="box-fallback"/>
   <text x="848" y="608" class="label">Demo fallback</text>
   <text x="848" y="633" class="mono">synthetic SQLite</text>
 
-  <!-- Lines: client/application -->
   <path class="line" d="M315 118 H392"/>
   <text x="332" y="109" class="small">HTTP</text>
   <path class="line-ai" d="M392 164 H342 V182 H315"/>
   <text x="330" y="174" class="small-orange">SSE</text>
 
-  <!-- Lines: application/AI -->
   <path class="line" d="M698 134 H802"/>
   <text x="714" y="124" class="small">AI chat</text>
   <path class="line-soft" d="M545 190 V220"/>
   <path class="line" d="M698 266 H750 V168 H802"/>
   <text x="708" y="255" class="small">context</text>
 
-  <!-- Lines: AI internals -->
   <path class="line-ai" d="M1054 144 H1086"/>
   <path class="line-ai" d="M1212 208 V226"/>
 
-  <!-- Lines to data -->
   <path class="line" d="M545 312 V448"/>
   <path class="line" d="M1079 322 V370 H517 V448"/>
   <text x="800" y="361" class="small">sales / loss / recharge</text>
   <path class="line" d="M1079 322 V382 H1093 V448"/>
   <text x="1104" y="383" class="small">weather</text>
 
-  <!-- Data internals -->
   <path class="line-soft" d="M642 494 H680"/>
   <text x="649" y="485" class="small">cache</text>
   <path class="line-dashed" d="M805 540 V560 H661 V578"/>
@@ -136,12 +118,10 @@
   <path class="line-dashed" d="M786 617 H824"/>
   <text x="792" y="607" class="small">fallback</text>
 
-  <!-- External POS -->
   <rect x="70" y="448" rx="11" ry="11" width="245" height="92" class="box"/>
   <text x="96" y="479" class="label">POS APIs</text>
   <text x="96" y="504" class="sub">live operational data</text>
   <path class="line" d="M315 494 H392"/>
 
-  <!-- Footer note -->
   <text x="70" y="718" class="small">Two paths share the same data layer: dashboard aggregation for BI, and tool-grounded analysis for AI responses.</text>
 </svg>
